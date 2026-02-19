@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon Budget</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: #f5f7fa;
+}
+
+.header {
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  color: white;
+  padding: 30px 20px;
+  border-bottom-left-radius: 25px;
+  border-bottom-right-radius: 25px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.header .amount {
+  font-size: 32px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.card {
+  background: white;
+  margin: -30px 20px 20px 20px;
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+select, input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  font-size: 16px;
+}
+
+.progress-container {
+  margin-top: 15px;
+}
+
+.progress {
+  height: 10px;
+  background: #eee;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #2a5298;
+  transition: width 0.4s ease;
+}
+
+.info {
+  font-size: 14px;
+  margin-top: 8px;
+  color: #555;
+}
+
+.fab {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  background: #2a5298;
+  color: white;
+  border: none;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  font-size: 28px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <h1>Budget - Catégorie</h1>
+  <div class="amount" id="amountDisplay">0 CHF</div>
+</div>
+
+<div class="card">
+  <select id="categorie">
+    <option>Alimentation</option>
+    <option>Logement</option>
+    <option>Loisirs</option>
+    <option>Transport</option>
+  </select>
+
+  <input type="number" id="montant" placeholder="Montant (CHF)">
+  <input type="text" id="description" placeholder="Description">
+
+  <div class="progress-container">
+    <div class="progress">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="info" id="infoText">0 / 0 CHF</div>
+  </div>
+</div>
+
+<button class="fab" onclick="ajouterDepense()">+</button>
+
+<script>
+const URL = "COLLE_ICI_TON_URL_APPS_SCRIPT";
+
+function ajouterDepense() {
+  const data = {
+    categorie: document.getElementById("categorie").value,
+    montant: document.getElementById("montant").value,
+    description: document.getElementById("description").value
+  };
+
+  fetch(URL, {
+    method: "POST",
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(res => {
+    const percent = res.pourcentage;
+    document.getElementById("progressBar").style.width = percent + "%";
+    document.getElementById("amountDisplay").innerText = res.total + " CHF";
+    document.getElementById("infoText").innerText =
+      res.total + " / " + res.limite + " CHF (" + percent.toFixed(1) + "%)";
+  });
+}
+</script>
+
+</body>
+</html>
