@@ -629,7 +629,8 @@ let extraIncomes  = {};  // "YYYY-MM" -> [{id,desc,amount,date}]
 let cfg = { sbUrl:'', sbKey:'' };
 let deleteTarget    = null; // {type, id, ...}
 let budgetOverrides = {};  // catId -> new monthly amount (for 'm' cats) or {dueM: amount} (for 'a' cats)
-let ccDebtOverride  = null; // number — user-editable remaining CC debt
+let ccDebtOverride   = null; // number — user-editable remaining CC debt
+let surplusOverride  = null; // number — user-editable surplus carried forward
 
 const mk  = m => `${YEAR}-${String(m+1).padStart(2,'0')}`;
 const getExp = m => expenses[mk(m)]     || [];
@@ -691,6 +692,7 @@ function persist() {
     b26_cfg:  cfg,
     b26_bov:  budgetOverrides,
     b26_ccov: ccDebtOverride,
+    b26_sov:  surplusOverride,
   };
   for (const [k,v] of Object.entries(data)) {
     try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){}
@@ -711,6 +713,7 @@ async function hydrate() {
   extraIncomes    = await load('b26_xi',   {});
   budgetOverrides = await load('b26_bov',  {});
   ccDebtOverride  = await load('b26_ccov', null);
+  surplusOverride = await load('b26_sov',  null);
   const savedCfg  = await load('b26_cfg',  {});
   cfg = {...cfg, ...savedCfg};
 }
@@ -756,6 +759,7 @@ function ccBudgetFor(m) {
   return Math.max(0, Math.min(monthIncome(m)-other, rem));
 }
 function prevSurplus(m) {
+  if (surplusOverride !== null) return surplusOverride;
   let s=0;
   for (let i=0;i<m;i++) {
     const b=totalBudget(i)+ccBudgetFor(i), a=totalActual(i);
@@ -833,7 +837,7 @@ function renderTiles() {
       <span class="tile-icon">${adjSol>=0?'✅':'⚠️'}</span>
       <div class="tile-lbl">Solde ajusté</div>
       <div class="tile-val ${adjSol>=0?'c-green':'c-red'}">${f(adjSol)}</div>
-      <div class="tile-sub">${surplus>0?'surplus '+f(surplus)+' reporté':deficit>0?'déficit '+f(deficit)+' déduit':'solde net'}</div>
+      <div class="tile-sub">${surplus>0?'surplus '+f(surplus)+(surplusOverride!==null?' ✎':'')+ ' reporté':deficit>0?'déficit '+f(deficit)+' déduit':'solde net'}</div>
     </div>`;
 }
 
@@ -941,7 +945,7 @@ function renderTable() {
     <span></span>
   </div>`;
 
-  if (surplus>0) html+=`<div class="banner ok">✅ Surplus des mois précédents reporté : <strong>${f(surplus)}</strong> — solde ajusté : <strong>${f(sol+surplus)}</strong></div>`;
+  if (surplus>0) html+=`<div class="banner ok" style="justify-content:space-between;align-items:center"><span>✅ Surplus reporté : <strong>${f(surplus)}</strong> — solde ajusté : <strong>${f(sol+surplus)}</strong></span><button class="edit-bud-btn" onclick="editSurplus()" style="font-size:0.82rem;padding:3px 8px;border-radius:6px;background:rgba(52,199,89,0.15);color:var(--green);border:none;cursor:pointer;font-family:inherit;font-weight:600">✎ Modifier</button></div>`;
   if (deficit>0) html+=`<div class="banner warn">⚠ Déficit cumulé déduit : <strong>${f(deficit)}</strong> — solde ajusté : <strong>${f(sol-deficit)}</strong></div>`;
   if (sol<0)     html+=`<div class="banner err">⚠ Dépassement de <strong>${f(Math.abs(sol))}</strong> ce mois</div>`;
 
@@ -1271,6 +1275,7 @@ async function pushSettingsToSB() {
     id: 'main',
     budget_overrides: budgetOverrides,
     cc_debt_override: ccDebtOverride,
+    surplus_override: surplusOverride,
   });
 }
 
@@ -1303,6 +1308,7 @@ async function syncFromSupabase() {
   if (settings && settings.length > 0) {
     budgetOverrides = settings[0].budget_overrides || {};
     ccDebtOverride  = settings[0].cc_debt_override ?? null;
+    surplusOverride = settings[0].surplus_override  ?? null;
   }
   persist(); renderAll(); setSB('ok');
   localStorage.setItem('cfg_reminder_dismissed', '1');
@@ -1459,6 +1465,56 @@ function saveCCDebt() {
 // ═══════════════════════════════════════════════════════════
 // GUIDE SUPABASE
 // ═══════════════════════════════════════════════════════════
+function editSurplus() {
+  _editCtx = { type: 'surplus' };
+  const computed = (function() {
+    let s = 0;
+    for (let i = 0; i < curM; i++) {
+      const b = totalBudget(i) + ccBudgetFor(i), a = totalActual(i);
+      s += Math.max(0, b - a);
+    }
+    return s;
+  })();
+  const cur = surplusOverride !== null ? surplusOverride : computed;
+  const IS = 'width:100%;padding:10px 12px;margin-top:6px;border-radius:10px;' +
+             'border:1px solid #ddd;background:#f9f9fb;font-family:inherit;' +
+             'font-size:1rem;color:#1c1c1e;box-sizing:border-box';
+  document.getElementById('modalTitle').textContent = 'Surplus reporté';
+  document.getElementById('modalBody').innerHTML =
+    '<p style="font-size:0.85rem;color:#6e6e73;margin-bottom:12px">' +
+    'Ajuste le surplus cumulé des mois précédents (par exemple si tu as utilisé ce surplus en dehors de l'app).</p>' +
+    '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Surplus à reporter (CHF)</label>' +
+    '<input type="number" id="editSurplusVal" value="' + cur.toFixed(2) + '" min="0" step="0.01" style="' + IS + '" />' +
+    '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">Valeur calculée automatiquement : ' + f(computed, 2) + '</p>';
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+    '<button class="cancel" onclick="resetSurplus()">Recalculer auto</button>' +
+    '<button class="confirm blue" onclick="saveSurplus()">Enregistrer</button>';
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(function() {
+    const inp = document.getElementById('editSurplusVal');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 320);
+}
+
+function saveSurplus() {
+  const val = parseFloat(document.getElementById('editSurplusVal').value);
+  if (isNaN(val) || val < 0) { toast('Montant invalide', 'err'); return; }
+  surplusOverride = val;
+  persist();
+  pushSettingsToSB();
+  closeModal(); renderAll();
+  toast('Surplus mis à jour ✓', 'ok');
+}
+
+function resetSurplus() {
+  surplusOverride = null;
+  persist();
+  pushSettingsToSB();
+  closeModal(); renderAll();
+  toast('Surplus recalculé automatiquement', 'ok');
+}
+
 function showGuide() {
   document.getElementById('modalTitle').textContent = 'Configuration Supabase';
   document.getElementById('modalBody').innerHTML =
@@ -1485,8 +1541,11 @@ function showGuide() {
     '  id text primary key,\n' +
     '  budget_overrides jsonb default \'{}\',\n' +
     '  cc_debt_override numeric,\n' +
+    '  surplus_override numeric,\n' +
     '  updated_at timestamptz default now()\n' +
     ');\n\n' +
+    '-- Si la table settings existe déjà, ajoute la colonne:\n' +
+    '-- alter table settings add column if not exists surplus_override numeric;\n\n' +
     'alter table transactions enable row level security;\n' +
     'alter table settings enable row level security;\n' +
     'create policy "allow all" on transactions\n' +
