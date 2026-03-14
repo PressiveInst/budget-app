@@ -978,7 +978,7 @@ function renderSavings() {
              Reste : <strong>${f(p.rem,2)}</strong> · Ce mois : <strong>${f(p.per,2)}</strong>`
         }
       </div>
-      <div class="sprogress"><div class="sprogress-fill ${p.done?'':'p.urgent?\"\":\"\"'}" style="width:${pct}%;background:${p.done?'var(--green)':p.urgent?'var(--orange)':'var(--blue)'}"></div></div>
+      <div class="sprogress"><div class="sprogress-fill" style="width:${pct}%;background:${p.done?'var(--green)':p.urgent?'var(--orange)':'var(--blue)'}"></div></div>
       ${!p.done?`
       <div class="prov-row">
         <input type="number" min="0" step="0.01" id="prov_${key}" placeholder="${p.per.toFixed(2)}" />
