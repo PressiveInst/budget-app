@@ -542,6 +542,9 @@ body {
           <div class="fg"><label>ID du Google Sheet</label><input id="sheetId" placeholder="1BxiMVs0XRA5nFMdKvB..." oninput="saveConfig()"/></div>
           <div class="fg"><label>Nom de l'onglet</label><input id="sheetTab" placeholder="Dépenses" oninput="saveConfig()"/></div>
           <div class="fg"><label>URL Apps Script (Web App)</label><input id="appsScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" oninput="saveConfig()"/></div>
+          <button class="btn-primary" onclick="saveConfigExplicit()" style="margin-bottom:4px">
+            Sauvegarder la configuration
+          </button>
           <button class="btn-sec" style="width:100%" onclick="testConnection()">Tester la connexion</button>
         </div>
       </div>
@@ -625,17 +628,70 @@ const totalSaved= (c,d) => getProv(c,d).reduce((s,p)=>s+p.amount,0);
 function extraIncomeTotal(m) { return getXI(m).reduce((s,x)=>s+x.amount, 0); }
 function monthIncome(m)      { return MONTH_INC[m] + extraIncomeTotal(m); }
 
-function persist() {
-  localStorage.setItem('b26_exp',  JSON.stringify(expenses));
-  localStorage.setItem('b26_prov', JSON.stringify(provisions));
-  localStorage.setItem('b26_xi',   JSON.stringify(extraIncomes));
-  localStorage.setItem('b26_cfg',  JSON.stringify(cfg));
+// ── Persistence: IndexedDB (primary) + localStorage (fallback) ──
+let idb = null;
+
+function openIDB() {
+  return new Promise((resolve) => {
+    if (idb) { resolve(idb); return; }
+    const req = indexedDB.open('budget2026', 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore('kv');
+    };
+    req.onsuccess = e => { idb = e.target.result; resolve(idb); };
+    req.onerror   = () => resolve(null);
+  });
 }
-function hydrate() {
-  try { expenses     = JSON.parse(localStorage.getItem('b26_exp')  || '{}'); } catch(e){}
-  try { provisions   = JSON.parse(localStorage.getItem('b26_prov') || '{}'); } catch(e){}
-  try { extraIncomes = JSON.parse(localStorage.getItem('b26_xi')   || '{}'); } catch(e){}
-  try { cfg = {...cfg, ...JSON.parse(localStorage.getItem('b26_cfg') || '{}')}; } catch(e){}
+
+async function idbSet(key, val) {
+  const db = await openIDB();
+  if (!db) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(val, key);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function idbGet(key) {
+  const db = await openIDB();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    const tx = db.transaction('kv', 'readonly');
+    const req = tx.objectStore('kv').get(key);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror   = () => resolve(null);
+  });
+}
+
+function persist() {
+  // Write to both localStorage and IndexedDB
+  const data = {
+    b26_exp:  expenses,
+    b26_prov: provisions,
+    b26_xi:   extraIncomes,
+    b26_cfg:  cfg,
+  };
+  for (const [k,v] of Object.entries(data)) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){}
+    idbSet(k, v); // async, fire & forget
+  }
+}
+
+async function hydrate() {
+  // Try IndexedDB first (survives Safari purges), fall back to localStorage
+  async function load(key, fallback) {
+    let val = await idbGet(key);
+    if (val !== null) return val;
+    try { val = JSON.parse(localStorage.getItem(key)); } catch(e){}
+    return val ?? fallback;
+  }
+  expenses     = await load('b26_exp',  {});
+  provisions   = await load('b26_prov', {});
+  extraIncomes = await load('b26_xi',   {});
+  const savedCfg = await load('b26_cfg', {});
+  cfg = {...cfg, ...savedCfg};
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1123,6 +1179,12 @@ function saveConfig() {
   persist();
   if(cfg.appsScriptUrl) setGS('sync'); else setGS('err');
 }
+
+// Explicit save button handler with confirmation
+function saveConfigExplicit() {
+  saveConfig();
+  toast('Configuration sauvegardée sur cet appareil ✓', 'ok');
+}
 function loadCfgUI() {
   document.getElementById('sheetId').value=cfg.sheetId||'';
   document.getElementById('sheetTab').value=cfg.sheetTab||'Dépenses';
@@ -1188,12 +1250,51 @@ function changeMonth() {
 // ═══════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════
-hydrate();
-loadCfgUI();
-initMonthSel();
-initForm();
-renderAll();
-if(cfg.appsScriptUrl) setGS('sync'); else setGS('err');
+// Boot — async to await IndexedDB hydration
+(async () => {
+  await hydrate();
+  loadCfgUI();
+  initMonthSel();
+  initForm();
+  renderAll();
+  if(cfg.appsScriptUrl) setGS('sync'); else setGS('err');
+  // Show setup prompt if no config yet
+  if (!cfg.appsScriptUrl) showConfigReminder();
+})();
+
+// ── Config reminder ──
+function showConfigReminder() {
+  // Only show once per session
+  if (sessionStorage.getItem('cfg_reminded')) return;
+  sessionStorage.setItem('cfg_reminded', '1');
+  const bar = document.createElement('div');
+  bar.id = 'cfgReminder';
+  bar.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;z-index:300;
+    background:#fff;border-top:0.5px solid var(--sep);
+    box-shadow:0 -4px 24px rgba(0,0,0,0.10);
+    padding:16px 20px 32px;display:flex;flex-direction:column;gap:10px;
+    animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
+  `;
+  bar.innerHTML = `
+    <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
+    <div style="font-size:1rem;font-weight:600;color:var(--text1)">⚙ Configurer Google Sheets</div>
+    <div style="font-size:0.84rem;color:var(--text3);line-height:1.5">
+      Colle l'URL de ton Apps Script pour synchroniser les données. 
+      La config sera sauvegardée de façon permanente sur cet appareil.
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('cfgReminder').remove()" 
+        style="flex:1;padding:11px;border-radius:12px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;color:var(--text2)">
+        Plus tard
+      </button>
+      <button onclick="document.getElementById('cfgReminder').remove();document.querySelector('.cfg-body').scrollIntoView({behavior:'smooth'});document.getElementById('appsScriptUrl').focus()"
+        style="flex:1;padding:11px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer">
+        Configurer
+      </button>
+    </div>`;
+  document.body.appendChild(bar);
+}
 
 // ── PWA Service Worker ──
 if ('serviceWorker' in navigator) {
