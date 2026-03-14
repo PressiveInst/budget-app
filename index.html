@@ -217,6 +217,13 @@ body {
   font-family: inherit;
 }
 .iadd:hover { background: var(--blue); color: #fff; }
+.edit-bud-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text4); font-size: 0.75rem;
+  padding: 1px 4px; margin-left: 4px; border-radius: 4px;
+  transition: all 0.12s; vertical-align: middle; font-family: inherit;
+}
+.edit-bud-btn:hover { background: var(--blue-bg); color: var(--blue); }
 .banner {
   margin: 8px 12px; padding: 10px 14px; border-radius: var(--r12);
   font-size: 0.8rem; font-weight: 500; display: flex; align-items: flex-start; gap: 7px;
@@ -601,7 +608,8 @@ const CATS = [
   {id:'reparations',   name:'Réparations voiture',                      t:'p', an:2000},
   {id:'cc',            name:'Remboursement carte de crédit',            t:'cc', debt:4700},
 ];
-const CC_DEBT = 4700;
+const CC_DEBT_DEFAULT = 4700;
+function getCCDebt() { return ccDebtOverride ?? CC_DEBT_DEFAULT; }
 
 // ═══════════════════════════════════════════════════════════
 // STATE
@@ -612,7 +620,9 @@ let expenses      = {};  // "YYYY-MM" -> [{id,cat,amount,date,note,dueMonth?}]
 let provisions    = {};  // "catId_dueM" -> [{id,month,amount}]
 let extraIncomes  = {};  // "YYYY-MM" -> [{id,desc,amount,date}]
 let cfg = { sheetId:'', sheetTab:'Dépenses', appsScriptUrl:'' };
-let deleteTarget  = null; // {type, id, ...}
+let deleteTarget    = null; // {type, id, ...}
+let budgetOverrides = {};  // catId -> new monthly amount (for 'm' cats) or {dueM: amount} (for 'a' cats)
+let ccDebtOverride  = null; // number — user-editable remaining CC debt
 
 const mk  = m => `${YEAR}-${String(m+1).padStart(2,'0')}`;
 const getExp = m => expenses[mk(m)]     || [];
@@ -672,6 +682,8 @@ function persist() {
     b26_prov: provisions,
     b26_xi:   extraIncomes,
     b26_cfg:  cfg,
+    b26_bov:  budgetOverrides,
+    b26_ccov: ccDebtOverride,
   };
   for (const [k,v] of Object.entries(data)) {
     try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){}
@@ -687,10 +699,12 @@ async function hydrate() {
     try { val = JSON.parse(localStorage.getItem(key)); } catch(e){}
     return val ?? fallback;
   }
-  expenses     = await load('b26_exp',  {});
-  provisions   = await load('b26_prov', {});
-  extraIncomes = await load('b26_xi',   {});
-  const savedCfg = await load('b26_cfg', {});
+  expenses        = await load('b26_exp',  {});
+  provisions      = await load('b26_prov', {});
+  extraIncomes    = await load('b26_xi',   {});
+  budgetOverrides = await load('b26_bov',  {});
+  ccDebtOverride  = await load('b26_ccov', null);
+  const savedCfg  = await load('b26_cfg',  {});
   cfg = {...cfg, ...savedCfg};
 }
 
@@ -700,8 +714,14 @@ async function hydrate() {
 function budgetFor(catId, m) {
   const c = CATS.find(x=>x.id===catId);
   if (!c) return 0;
-  if (c.t==='m') return c.mo;
-  if (c.t==='a') { const i=c.dm.indexOf(m); return i>=0 ? c.da[i] : 0; }
+  if (c.t==='m') return budgetOverrides[catId] ?? c.mo;
+  if (c.t==='a') {
+    const i=c.dm.indexOf(m);
+    if (i < 0) return 0;
+    // Override for annual: stored as {dueM: amount}
+    const ov = budgetOverrides[catId];
+    return (ov && ov[m] != null) ? ov[m] : c.da[i];
+  }
   return 0;
 }
 function actualFor(catId, m) {
@@ -723,7 +743,7 @@ function ccPaidTotal() {
 function ccBudgetFor(m) {
   let paid=0;
   for (let i=0;i<m;i++) paid+=getExp(i).filter(e=>e.cat==='cc').reduce((s,e)=>s+e.amount,0);
-  const rem=Math.max(0,CC_DEBT-paid);
+  const rem=Math.max(0,getCCDebt()-paid);
   if (rem<=0) return 0;
   const other=CATS.filter(c=>c.t!=='cc').reduce((s,c)=>s+budgetFor(c.id,m),0);
   return Math.max(0, Math.min(monthIncome(m)-other, rem));
@@ -835,9 +855,12 @@ function renderTable() {
     const diffSpan=(act>0||bud>0)
       ? `<span class="am diff ${ov?'ov':'ok'}">${diff>0?'+':''}${f(diff)}</span>`
       : '<span></span>';
+    const editBtn = (cat.t==='m'||cat.t==='a')
+      ? `<button class="edit-bud-btn" onclick="editBudget('${cat.id}')" title="Modifier le budget">✎</button>`
+      : '';
     return `
       <div class="brow">
-        <span class="${nc}">${cat.name}</span>
+        <span class="${nc}">${cat.name}${editBtn}</span>
         <span class="am dim">${bud>0?f(bud):'—'}</span>
         <span class="am ${act>0?(ov?'ov':'ok'):''}">${act>0?f(act):'—'}</span>
         ${diffSpan}
@@ -886,11 +909,11 @@ function renderTable() {
 
   // CC
   const ccBud=ccBudgetFor(m), ccAct=actualFor('cc',m);
-  const ccRem=Math.max(0,CC_DEBT-ccPaidTotal());
+  const ccRem=Math.max(0,getCCDebt()-ccPaidTotal());
   if (ccRem>0||ccAct>0) {
     html+=`<div class="sec-hdr">Remboursement carte de crédit</div>
       <div class="brow">
-        <span class="cn">Remboursement CC <span style="font-size:0.72rem;color:var(--text3)">(reste: ${f(ccRem)})</span></span>
+        <span class="cn">Remboursement CC <span style="font-size:0.72rem;color:var(--text3)">(reste: ${f(ccRem)})</span><button class="edit-bud-btn" onclick="editCCDebt()" title="Modifier la dette">✎</button></span>
         <span class="am dim">${f(ccBud)}</span>
         <span class="am ${ccAct>0?'ok':''}">${ccAct>0?f(ccAct):'—'}</span>
         <span class="am diff ok">${ccAct>0?f(ccAct-ccBud):''}</span>
@@ -1177,19 +1200,129 @@ function saveConfig() {
   cfg.sheetTab=document.getElementById('sheetTab').value||'Dépenses';
   cfg.appsScriptUrl=document.getElementById('appsScriptUrl').value;
   persist();
-  if(cfg.appsScriptUrl) setGS('sync'); else setGS('err');
+  if(cfg.appsScriptUrl) setGS('err'); else setGS('err');
 }
 
-// Explicit save button handler with confirmation
-function saveConfigExplicit() {
+// Explicit save button handler — saves then auto-tests connection
+async function saveConfigExplicit() {
   saveConfig();
-  toast('Configuration sauvegardée sur cet appareil ✓', 'ok');
+  toast('Configuration sauvegardée ✓', 'ok');
+  if (cfg.appsScriptUrl) {
+    await testConnection();
+  }
 }
 function loadCfgUI() {
   document.getElementById('sheetId').value=cfg.sheetId||'';
   document.getElementById('sheetTab').value=cfg.sheetTab||'Dépenses';
   document.getElementById('appsScriptUrl').value=cfg.appsScriptUrl||'';
 }
+// ── Budget override modal ──
+function editBudget(catId) {
+  const c = CATS.find(x=>x.id===catId);
+  if (!c) return;
+  const curVal = c.t==='m'
+    ? (budgetOverrides[catId] ?? c.mo)
+    : null; // annual handled per-occurrence
+
+  document.getElementById('modalTitle').textContent = 'Modifier le budget';
+  if (c.t === 'm') {
+    document.getElementById('modalBody').innerHTML = `
+      <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">${c.name}</p>
+      <div class="fg">
+        <label>Montant mensuel (CHF)</label>
+        <input type="number" id="editBudgetVal" value="${curVal}" min="0" step="0.01"
+          style="padding:9px 12px;border-radius:var(--r8);border:0.5px solid var(--sep);
+                 background:var(--bg3);font-family:inherit;font-size:1rem;width:100%"/>
+      </div>
+      <p style="font-size:0.75rem;color:var(--text4);margin-top:8px">
+        Valeur par défaut : ${f(c.mo,2)}
+      </p>`;
+    document.getElementById('modalBtns').innerHTML = `
+      <button class="cancel" onclick="closeModal()">Annuler</button>
+      <button class="cancel" onclick="resetBudget('${catId}')">Réinitialiser</button>
+      <button class="confirm blue" onclick="saveBudgetOverride('${catId}','m')">Enregistrer</button>`;
+  } else if (c.t === 'a') {
+    const rows = c.dm.map((dueM, di) => {
+      const ov = budgetOverrides[catId];
+      const cur = (ov && ov[dueM] != null) ? ov[dueM] : c.da[di];
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="flex:1;font-size:0.85rem;color:var(--text2)">${MNAMES[dueM]}</span>
+        <input type="number" id="editAnn_${dueM}" value="${cur}" min="0" step="0.01"
+          style="width:120px;padding:7px 10px;border-radius:var(--r8);border:0.5px solid var(--sep);
+                 background:var(--bg3);font-family:inherit;font-size:0.9rem;text-align:right"/>
+      </div>`;
+    }).join('');
+    document.getElementById('modalBody').innerHTML = `
+      <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">${c.name}</p>
+      ${rows}`;
+    document.getElementById('modalBtns').innerHTML = `
+      <button class="cancel" onclick="closeModal()">Annuler</button>
+      <button class="cancel" onclick="resetBudget('${catId}')">Réinitialiser</button>
+      <button class="confirm blue" onclick="saveBudgetOverride('${catId}','a',${JSON.stringify(c.dm)})">Enregistrer</button>`;
+  }
+  document.getElementById('overlay').classList.add('open');
+}
+
+function saveBudgetOverride(catId, type, dms) {
+  if (type === 'm') {
+    const val = parseFloat(document.getElementById('editBudgetVal').value);
+    if (isNaN(val) || val < 0) { toast('Montant invalide','err'); return; }
+    budgetOverrides[catId] = val;
+  } else {
+    const map = {};
+    for (const dueM of dms) {
+      const val = parseFloat(document.getElementById('editAnn_'+dueM).value);
+      if (!isNaN(val) && val >= 0) map[dueM] = val;
+    }
+    budgetOverrides[catId] = map;
+  }
+  persist();
+  closeModal();
+  renderAll();
+  toast('Budget mis à jour','ok');
+}
+
+function resetBudget(catId) {
+  delete budgetOverrides[catId];
+  persist();
+  closeModal();
+  renderAll();
+  toast('Budget réinitialisé','ok');
+}
+
+// ── CC Debt override modal ──
+function editCCDebt() {
+  const cur = getCCDebt();
+  document.getElementById('modalTitle').textContent = 'Modifier la dette CC';
+  document.getElementById('modalBody').innerHTML = `
+    <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">
+      Montant réel restant à rembourser sur la carte de crédit.
+    </p>
+    <div class="fg">
+      <label>Montant restant (CHF)</label>
+      <input type="number" id="editCCVal" value="${cur}" min="0" step="0.01"
+        style="padding:9px 12px;border-radius:var(--r8);border:0.5px solid var(--sep);
+               background:var(--bg3);font-family:inherit;font-size:1rem;width:100%"/>
+    </div>
+    <p style="font-size:0.75rem;color:var(--text4);margin-top:8px">
+      Dette initiale : ${f(CC_DEBT_DEFAULT,2)} · Remboursements enregistrés : ${f(ccPaidTotal(),2)}
+    </p>`;
+  document.getElementById('modalBtns').innerHTML = `
+    <button class="cancel" onclick="closeModal()">Annuler</button>
+    <button class="confirm blue" onclick="saveCCDebt()">Enregistrer</button>`;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function saveCCDebt() {
+  const val = parseFloat(document.getElementById('editCCVal').value);
+  if (isNaN(val) || val < 0) { toast('Montant invalide','err'); return; }
+  ccDebtOverride = val;
+  persist();
+  closeModal();
+  renderAll();
+  toast('Dette CC mise à jour','ok');
+}
+
 function showGuide() {
   document.getElementById('modalTitle').textContent='Configuration Apps Script';
   document.getElementById('modalBody').innerHTML=`
