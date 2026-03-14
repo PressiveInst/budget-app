@@ -1190,25 +1190,54 @@ async function sendSheets(entry,cat) {
   }
 }
 async function testConnection() {
-  if(!cfg.appsScriptUrl){toast('URL manquante','err');return;}
+  if (!cfg.appsScriptUrl) { toast('URL manquante', 'err'); return; }
   setGS('sync');
-  try { await fetch(cfg.appsScriptUrl+'?action=ping',{mode:'no-cors'}); setGS('ok');toast('Connexion OK','ok'); }
-  catch(e){ setGS('err');toast('Connexion échouée','err'); }
+  try {
+    // GET without no-cors so we can actually read the response
+    const res = await fetch(cfg.appsScriptUrl + '?action=ping', {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-cache',
+    });
+    const text = await res.text();
+    if (res.ok || text.includes('ok')) {
+      setGS('ok'); toast('Connexion Google Sheets OK ✓', 'ok');
+    } else {
+      setGS('err'); toast('Réponse inattendue du serveur', 'err');
+    }
+  } catch(e) {
+    // CORS error on success is normal for Apps Script — if we get a CORS error
+    // it means the server responded (it exists), just blocked by browser policy
+    if (e instanceof TypeError && e.message.includes('fetch')) {
+      // Network truly unreachable
+      setGS('err'); toast('Impossible de joindre le serveur', 'err');
+    } else {
+      // CORS block = server responded = URL is valid
+      setGS('ok'); toast('Connexion OK (réponse reçue)', 'ok');
+    }
+  }
 }
 function saveConfig() {
-  cfg.sheetId=document.getElementById('sheetId').value;
-  cfg.sheetTab=document.getElementById('sheetTab').value||'Dépenses';
-  cfg.appsScriptUrl=document.getElementById('appsScriptUrl').value;
+  // Called on every keystroke (oninput) — only persist, don't test
+  cfg.sheetId  = document.getElementById('sheetId').value;
+  cfg.sheetTab = document.getElementById('sheetTab').value || 'Dépenses';
+  cfg.appsScriptUrl = document.getElementById('appsScriptUrl').value;
   persist();
-  if(cfg.appsScriptUrl) setGS('err'); else setGS('err');
+  // Don't test here — only test on explicit save button click
 }
 
 // Explicit save button handler — saves then auto-tests connection
 async function saveConfigExplicit() {
-  saveConfig();
+  // Save first (without triggering setGS 'sync')
+  cfg.sheetId  = document.getElementById('sheetId').value;
+  cfg.sheetTab = document.getElementById('sheetTab').value || 'Dépenses';
+  cfg.appsScriptUrl = document.getElementById('appsScriptUrl').value;
+  persist();
   toast('Configuration sauvegardée ✓', 'ok');
   if (cfg.appsScriptUrl) {
     await testConnection();
+  } else {
+    setGS('err');
   }
 }
 function loadCfgUI() {
@@ -1216,111 +1245,131 @@ function loadCfgUI() {
   document.getElementById('sheetTab').value=cfg.sheetTab||'Dépenses';
   document.getElementById('appsScriptUrl').value=cfg.appsScriptUrl||'';
 }
-// ── Budget override modal ──
-function editBudget(catId) {
-  const c = CATS.find(x=>x.id===catId);
-  if (!c) return;
-  const curVal = c.t==='m'
-    ? (budgetOverrides[catId] ?? c.mo)
-    : null; // annual handled per-occurrence
+// ── Budget & CC edit modals ──
+// Use a closure variable to avoid passing complex data through onclick attributes
+let _editCtx = null;
 
-  document.getElementById('modalTitle').textContent = 'Modifier le budget';
+function editBudget(catId) {
+  const c = CATS.find(x => x.id === catId);
+  if (!c) return;
+  _editCtx = { catId, type: c.t, dms: c.dm };
+
+  const inputStyle = [
+    'width:100%', 'padding:10px 12px', 'margin-top:6px',
+    'border-radius:10px', 'border:1px solid #ddd',
+    'background:#f9f9fb', 'font-family:inherit',
+    'font-size:1rem', 'color:#1c1c1e', 'box-sizing:border-box'
+  ].join(';');
+
+  document.getElementById('modalTitle').textContent = 'Modifier le budget — ' + c.name;
+
   if (c.t === 'm') {
-    document.getElementById('modalBody').innerHTML = `
-      <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">${c.name}</p>
-      <div class="fg">
-        <label>Montant mensuel (CHF)</label>
-        <input type="number" id="editBudgetVal" value="${curVal}" min="0" step="0.01"
-          style="padding:9px 12px;border-radius:var(--r8);border:0.5px solid var(--sep);
-                 background:var(--bg3);font-family:inherit;font-size:1rem;width:100%"/>
-      </div>
-      <p style="font-size:0.75rem;color:var(--text4);margin-top:8px">
-        Valeur par défaut : ${f(c.mo,2)}
-      </p>`;
-    document.getElementById('modalBtns').innerHTML = `
-      <button class="cancel" onclick="closeModal()">Annuler</button>
-      <button class="cancel" onclick="resetBudget('${catId}')">Réinitialiser</button>
-      <button class="confirm blue" onclick="saveBudgetOverride('${catId}','m')">Enregistrer</button>`;
-  } else if (c.t === 'a') {
-    const rows = c.dm.map((dueM, di) => {
+    const cur = budgetOverrides[catId] ?? c.mo;
+    document.getElementById('modalBody').innerHTML =
+      '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Montant mensuel (CHF)</label>' +
+      '<input type="number" id="editBudgetVal" value="' + cur + '" min="0" step="0.01" style="' + inputStyle + '" />' +
+      '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">Valeur par défaut : ' + f(c.mo, 2) + '</p>';
+  } else {
+    let rows = '';
+    c.dm.forEach(function(dueM, di) {
       const ov = budgetOverrides[catId];
       const cur = (ov && ov[dueM] != null) ? ov[dueM] : c.da[di];
-      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.85rem;color:var(--text2)">${MNAMES[dueM]}</span>
-        <input type="number" id="editAnn_${dueM}" value="${cur}" min="0" step="0.01"
-          style="width:120px;padding:7px 10px;border-radius:var(--r8);border:0.5px solid var(--sep);
-                 background:var(--bg3);font-family:inherit;font-size:0.9rem;text-align:right"/>
-      </div>`;
-    }).join('');
-    document.getElementById('modalBody').innerHTML = `
-      <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">${c.name}</p>
-      ${rows}`;
-    document.getElementById('modalBtns').innerHTML = `
-      <button class="cancel" onclick="closeModal()">Annuler</button>
-      <button class="cancel" onclick="resetBudget('${catId}')">Réinitialiser</button>
-      <button class="confirm blue" onclick="saveBudgetOverride('${catId}','a',${JSON.stringify(c.dm)})">Enregistrer</button>`;
+      rows +=
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
+        '<span style="flex:1;font-size:0.9rem;color:#3a3a3c">' + MNAMES[dueM] + '</span>' +
+        '<input type="number" id="editAnn_' + dueM + '" value="' + cur + '" min="0" step="0.01" ' +
+        'style="width:130px;padding:8px 10px;border-radius:10px;border:1px solid #ddd;background:#f9f9fb;font-family:inherit;font-size:0.95rem;text-align:right;color:#1c1c1e" />' +
+        '</div>';
+    });
+    document.getElementById('modalBody').innerHTML = rows;
   }
+
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+    '<button class="cancel" onclick="resetBudget()">Réinitialiser</button>' +
+    '<button class="confirm blue" onclick="saveBudgetOverride()">Enregistrer</button>';
+
   document.getElementById('overlay').classList.add('open');
+  // Focus first input after animation
+  setTimeout(function() {
+    const inp = document.querySelector('#modalBody input');
+    if (inp) inp.focus();
+  }, 320);
 }
 
-function saveBudgetOverride(catId, type, dms) {
+function saveBudgetOverride() {
+  if (!_editCtx) return;
+  const { catId, type, dms } = _editCtx;
   if (type === 'm') {
     const val = parseFloat(document.getElementById('editBudgetVal').value);
-    if (isNaN(val) || val < 0) { toast('Montant invalide','err'); return; }
+    if (isNaN(val) || val < 0) { toast('Montant invalide', 'err'); return; }
     budgetOverrides[catId] = val;
   } else {
     const map = {};
-    for (const dueM of dms) {
-      const val = parseFloat(document.getElementById('editAnn_'+dueM).value);
-      if (!isNaN(val) && val >= 0) map[dueM] = val;
-    }
+    dms.forEach(function(dueM) {
+      const inp = document.getElementById('editAnn_' + dueM);
+      if (inp) {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val) && val >= 0) map[dueM] = val;
+      }
+    });
     budgetOverrides[catId] = map;
   }
   persist();
   closeModal();
   renderAll();
-  toast('Budget mis à jour','ok');
+  toast('Budget mis à jour ✓', 'ok');
 }
 
-function resetBudget(catId) {
-  delete budgetOverrides[catId];
+function resetBudget() {
+  if (!_editCtx) return;
+  delete budgetOverrides[_editCtx.catId];
   persist();
   closeModal();
   renderAll();
-  toast('Budget réinitialisé','ok');
+  toast('Budget réinitialisé', 'ok');
 }
 
 // ── CC Debt override modal ──
 function editCCDebt() {
+  _editCtx = { type: 'cc' };
   const cur = getCCDebt();
-  document.getElementById('modalTitle').textContent = 'Modifier la dette CC';
-  document.getElementById('modalBody').innerHTML = `
-    <p style="font-size:0.85rem;color:var(--text3);margin-bottom:12px">
-      Montant réel restant à rembourser sur la carte de crédit.
-    </p>
-    <div class="fg">
-      <label>Montant restant (CHF)</label>
-      <input type="number" id="editCCVal" value="${cur}" min="0" step="0.01"
-        style="padding:9px 12px;border-radius:var(--r8);border:0.5px solid var(--sep);
-               background:var(--bg3);font-family:inherit;font-size:1rem;width:100%"/>
-    </div>
-    <p style="font-size:0.75rem;color:var(--text4);margin-top:8px">
-      Dette initiale : ${f(CC_DEBT_DEFAULT,2)} · Remboursements enregistrés : ${f(ccPaidTotal(),2)}
-    </p>`;
-  document.getElementById('modalBtns').innerHTML = `
-    <button class="cancel" onclick="closeModal()">Annuler</button>
-    <button class="confirm blue" onclick="saveCCDebt()">Enregistrer</button>`;
+
+  const inputStyle = [
+    'width:100%', 'padding:10px 12px', 'margin-top:6px',
+    'border-radius:10px', 'border:1px solid #ddd',
+    'background:#f9f9fb', 'font-family:inherit',
+    'font-size:1rem', 'color:#1c1c1e', 'box-sizing:border-box'
+  ].join(';');
+
+  document.getElementById('modalTitle').textContent = 'Dette carte de crédit';
+  document.getElementById('modalBody').innerHTML =
+    '<p style="font-size:0.85rem;color:#6e6e73;margin-bottom:12px">Saisis le montant réel restant à rembourser.</p>' +
+    '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Montant restant (CHF)</label>' +
+    '<input type="number" id="editCCVal" value="' + cur + '" min="0" step="0.01" style="' + inputStyle + '" />' +
+    '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">' +
+    'Dette initiale : ' + f(CC_DEBT_DEFAULT, 2) + ' · Remboursements enregistrés : ' + f(ccPaidTotal(), 2) +
+    '</p>';
+
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+    '<button class="confirm blue" onclick="saveCCDebt()">Enregistrer</button>';
+
   document.getElementById('overlay').classList.add('open');
+  setTimeout(function() {
+    const inp = document.getElementById('editCCVal');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 320);
 }
 
 function saveCCDebt() {
   const val = parseFloat(document.getElementById('editCCVal').value);
-  if (isNaN(val) || val < 0) { toast('Montant invalide','err'); return; }
+  if (isNaN(val) || val < 0) { toast('Montant invalide', 'err'); return; }
   ccDebtOverride = val;
   persist();
   closeModal();
   renderAll();
-  toast('Dette CC mise à jour','ok');
+  toast('Dette CC mise à jour ✓', 'ok');
 }
 
 function showGuide() {
