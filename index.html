@@ -1585,16 +1585,24 @@ function changeMonth() {
 // BOOT
 // ═══════════════════════════════════════════════════════════
 (async () => {
-  await hydrate();
-  loadCfgUI();
-  initMonthSel();
-  initForm();
-  renderAll();
-  if (hasSB()) {
-    await testConnection();
-  } else {
-    setSB('err');
-    showConfigReminder();
+  try {
+    await hydrate();
+    loadCfgUI();
+    initMonthSel();
+    initForm();
+    renderAll();
+    if (hasSB()) {
+      await testConnection();
+    } else {
+      setSB('err');
+      showConfigReminder();
+    }
+  } catch(e) {
+    console.error('BOOT ERROR:', e);
+    // Show error visibly on page
+    document.getElementById('budgetTable').innerHTML =
+      '<div style="padding:20px;color:red;font-family:monospace;font-size:0.8rem">' +
+      '<strong>Erreur au démarrage:</strong><br>' + e.message + '<br><br>' + e.stack + '</div>';
   }
 })();
 
