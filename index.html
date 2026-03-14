@@ -539,20 +539,27 @@ body {
         <div id="txList" class="tx-list"></div>
       </div>
 
-      <!-- Google Sheets config -->
+      <!-- Supabase config -->
       <div class="card">
         <div class="card-hdr">
-          <h2>Google Sheets</h2>
+          <h2>Supabase</h2>
           <button class="cfg-link" onclick="showGuide()">Guide de config</button>
         </div>
         <div class="cfg-body">
-          <div class="fg"><label>ID du Google Sheet</label><input id="sheetId" placeholder="1BxiMVs0XRA5nFMdKvB..." oninput="saveConfig()"/></div>
-          <div class="fg"><label>Nom de l'onglet</label><input id="sheetTab" placeholder="Dépenses" oninput="saveConfig()"/></div>
-          <div class="fg"><label>URL Apps Script (Web App)</label><input id="appsScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" oninput="saveConfig()"/></div>
+          <div class="fg">
+            <label>Project URL</label>
+            <input id="sbUrl" placeholder="https://xxxx.supabase.co" oninput="saveConfig()"/>
+          </div>
+          <div class="fg">
+            <label>Anon Key (public)</label>
+            <input id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIs..." oninput="saveConfig()" type="password"/>
+          </div>
           <button class="btn-primary" onclick="saveConfigExplicit()" style="margin-bottom:4px">
-            Sauvegarder la configuration
+            Sauvegarder &amp; connecter
           </button>
-          <button class="btn-sec" style="width:100%" onclick="testConnection()">Tester la connexion</button>
+          <button class="btn-sec" style="width:100%" onclick="syncFromSupabase()">
+            ↓ Récupérer mes données
+          </button>
         </div>
       </div>
 
@@ -619,7 +626,7 @@ const YEAR = 2026;
 let expenses      = {};  // "YYYY-MM" -> [{id,cat,amount,date,note,dueMonth?}]
 let provisions    = {};  // "catId_dueM" -> [{id,month,amount}]
 let extraIncomes  = {};  // "YYYY-MM" -> [{id,desc,amount,date}]
-let cfg = { sheetId:'', sheetTab:'Dépenses', appsScriptUrl:'' };
+let cfg = { sbUrl:'', sbKey:'' };
 let deleteTarget    = null; // {type, id, ...}
 let budgetOverrides = {};  // catId -> new monthly amount (for 'm' cats) or {dueM: amount} (for 'a' cats)
 let ccDebtOverride  = null; // number — user-editable remaining CC debt
@@ -984,16 +991,19 @@ function addProv(catId,dueM) {
   const amt=parseFloat(inp.value);
   if(!amt||amt<=0){toast('Montant invalide','err');return;}
   const list=getProv(catId,dueM);
-  list.push({id:Date.now().toString(),month:curM,amount:amt});
+  const newProv = {id:Date.now().toString(),month:curM,amount:amt};
+  list.push(newProv);
   setProv(catId,dueM,list);
   inp.value='';
   renderSavings(); renderTiles();
+  sendProvToSB(catId, dueM, newProv);
   const cat=CATS.find(c=>c.id===catId);
   toast(`${cat?.name} — ${f(amt,2)} mis de côté`,'ok');
 }
 
 function deleteProv(catId,dueM,provId) {
   setProv(catId,dueM,getProv(catId,dueM).filter(p=>p.id!==provId));
+  sbDelete('transactions', provId);
   renderSavings(); renderTiles();
   toast('Provision supprimée','info');
 }
@@ -1109,7 +1119,7 @@ async function addExpense() {
   const entry={id:Date.now().toString(),cat:catId,amount,date,note,month:curM};
   if(cat&&cat.t==='a') entry.dueMonth=parseInt(document.getElementById('expDueMonth').value);
   const arr=getExp(curM); arr.push(entry); setExp(curM,arr);
-  await sendSheets(entry,cat);
+  await sendToSB(entry, cat);
   document.getElementById('expAmount').value='';
   document.getElementById('expNote').value='';
   renderAll();
@@ -1127,7 +1137,7 @@ async function addExtraIncome() {
   if(!date){toast('Date requise','err');return;}
   const entry={id:Date.now().toString(),desc:desc||'Revenu extra',amount,date};
   const arr=getXI(curM); arr.push(entry); setXI(curM,arr);
-  await sendSheets({...entry,cat:'xi',month:curM},{name:'Revenu extra',t:'xi'});
+  await sendXItoSB(entry);
   document.getElementById('xiAmount').value='';
   document.getElementById('xiDesc').value='';
   renderAll();
@@ -1138,163 +1148,245 @@ async function addExtraIncome() {
 // DELETE
 // ═══════════════════════════════════════════════════════════
 function askDel(type, id, name, amt) {
-  deleteTarget={type,id};
-  document.getElementById('modalTitle').textContent='Supprimer ?';
-  document.getElementById('modalBody').innerHTML=`<p style="font-size:0.9rem;color:var(--text3)">${name} · ${f(amt,2)}</p>`;
-  document.getElementById('modalBtns').innerHTML=`
-    <button class="cancel" onclick="closeModal()">Annuler</button>
-    <button class="confirm" onclick="confirmDelete()">Supprimer</button>`;
+  deleteTarget = {type, id};
+  document.getElementById('modalTitle').textContent = 'Supprimer ?';
+  document.getElementById('modalBody').innerHTML =
+    '<p style="font-size:0.9rem;color:var(--text3)">' + name + ' · ' + f(amt,2) + '</p>';
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+    '<button class="confirm" onclick="confirmDelete()">Supprimer</button>';
   document.getElementById('overlay').classList.add('open');
 }
 function closeModal() {
-  deleteTarget=null;
+  deleteTarget = null;
   document.getElementById('overlay').classList.remove('open');
 }
 function confirmDelete() {
-  if(!deleteTarget) return;
-  if(deleteTarget.type==='exp') setExp(curM,getExp(curM).filter(e=>e.id!==deleteTarget.id));
-  if(deleteTarget.type==='xi')  setXI(curM, getXI(curM).filter(x=>x.id!==deleteTarget.id));
-  closeModal(); renderAll(); toast('Supprimé','info');
+  if (!deleteTarget) return;
+  if (deleteTarget.type === 'exp') {
+    setExp(curM, getExp(curM).filter(e => e.id !== deleteTarget.id));
+    sbDelete('transactions', deleteTarget.id);
+  }
+  if (deleteTarget.type === 'xi') {
+    setXI(curM, getXI(curM).filter(x => x.id !== deleteTarget.id));
+    sbDelete('transactions', deleteTarget.id);
+  }
+  closeModal(); renderAll(); toast('Supprimé', 'info');
 }
 
 // ═══════════════════════════════════════════════════════════
-// GOOGLE SHEETS
+// SUPABASE
 // ═══════════════════════════════════════════════════════════
-function setGS(state) {
-  const el=document.getElementById('gsStatus');
-  const map={ok:['Synchronisé','ok'],err:['Hors ligne','err'],sync:['Synchro...','sync']};
-  const [txt,cls]=map[state]||map.err;
-  el.textContent=txt; el.className='gs-dot '+cls;
+function sbH() {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': cfg.sbKey,
+    'Authorization': 'Bearer ' + cfg.sbKey,
+  };
 }
-async function sendSheets(entry,cat) {
-  if(!cfg.appsScriptUrl){setGS('err');return;}
-  setGS('sync');
-  const btn=document.getElementById('submitBtn');
-  if(btn){btn.disabled=true;btn.innerHTML='<div class="spin"></div><span>Envoi...</span>';}
+function sbU(table) { return cfg.sbUrl + '/rest/v1/' + table; }
+function hasSB() { return !!(cfg.sbUrl && cfg.sbKey); }
+
+function setSB(state) {
+  const el = document.getElementById('gsStatus');
+  const map = { ok:['Synchronisé','ok'], err:['Hors ligne','err'], sync:['Synchro...','sync'] };
+  const [txt, cls] = map[state] || map.err;
+  el.textContent = txt; el.className = 'gs-dot ' + cls;
+}
+
+async function sbUpsert(table, row) {
+  if (!hasSB()) return false;
   try {
-    await fetch(cfg.appsScriptUrl,{
-      method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        action:'addExpense', sheetTab:cfg.sheetTab||'Dépenses',
-        data:{id:entry.id,date:entry.date,mois:MNAMES[entry.month],
-          categorie:cat?.name||entry.cat,type:cat?.t||'',montant:entry.amount,
-          note:entry.note||'',mois_echeance:entry.dueMonth!=null?MNAMES[entry.dueMonth]:''}
-      })
+    const res = await fetch(sbU(table), {
+      method: 'POST',
+      headers: { ...sbH(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(row),
     });
-    setGS('ok');
-  } catch(e) {
-    setGS('err'); toast('Google Sheets indisponible — sauvé localement','info');
-  } finally {
-    if(btn){btn.disabled=false;btn.innerHTML='<span>Enregistrer</span>';}
-  }
+    return res.ok || res.status === 201 || res.status === 204;
+  } catch(e) { return false; }
 }
-async function testConnection() {
-  if (!cfg.appsScriptUrl) { toast('URL manquante', 'err'); return; }
-  setGS('sync');
+
+async function sbDelete(table, id) {
+  if (!hasSB()) return;
   try {
-    // GET without no-cors so we can actually read the response
-    const res = await fetch(cfg.appsScriptUrl + '?action=ping', {
+    await fetch(sbU(table) + '?id=eq.' + encodeURIComponent(id), {
+      method: 'DELETE', headers: sbH(),
+    });
+  } catch(e) {}
+}
+
+async function sbFetch(table, params) {
+  if (!hasSB()) return null;
+  try {
+    const res = await fetch(sbU(table) + (params ? '?' + params : ''), {
       method: 'GET',
-      mode: 'cors',
-      cache: 'no-cache',
+      headers: { ...sbH(), 'Prefer': 'return=representation' },
     });
-    const text = await res.text();
-    if (res.ok || text.includes('ok')) {
-      setGS('ok');
-      localStorage.setItem('cfg_reminder_dismissed', '1');
-      const r = document.getElementById('cfgReminder'); if (r) r.remove();
-      toast('Connexion Google Sheets OK ✓', 'ok');
-    } else {
-      setGS('err'); toast('Réponse inattendue du serveur', 'err');
-    }
-  } catch(e) {
-    // CORS block = Apps Script responded = URL is valid
-    if (e.name === 'TypeError' && (e.message.includes('NetworkError') || e.message.includes('Failed to fetch') || e.message.includes('Load failed'))) {
-      setGS('err'); toast('Impossible de joindre le serveur', 'err');
-    } else {
-      // Any other error (CORS etc.) means server responded — connection works
-      setGS('ok');
-      localStorage.setItem('cfg_reminder_dismissed', '1');
-      const r = document.getElementById('cfgReminder'); if (r) r.remove();
-      toast('Connexion OK ✓', 'ok');
-    }
-  }
-}
-function saveConfig() {
-  // Called on every keystroke (oninput) — only persist, don't test
-  cfg.sheetId  = document.getElementById('sheetId').value;
-  cfg.sheetTab = document.getElementById('sheetTab').value || 'Dépenses';
-  cfg.appsScriptUrl = document.getElementById('appsScriptUrl').value;
-  persist();
-  // Don't test here — only test on explicit save button click
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
 }
 
-// Explicit save button handler — saves then auto-tests connection
+async function sendToSB(entry, cat) {
+  if (!hasSB()) { setSB('err'); return; }
+  setSB('sync');
+  const ok = await sbUpsert('transactions', {
+    id: entry.id, year: YEAR, month: entry.month,
+    cat_id: entry.cat, cat_name: cat?.name || entry.cat,
+    cat_type: cat?.t || '', amount: entry.amount,
+    date: entry.date, note: entry.note || '',
+    due_month: entry.dueMonth != null ? entry.dueMonth : null,
+    record_type: 'expense',
+  });
+  setSB(ok ? 'ok' : 'err');
+  if (!ok) toast('Sauvé localement — sync échouée', 'info');
+}
+
+async function sendXItoSB(entry) {
+  if (!hasSB()) return;
+  await sbUpsert('transactions', {
+    id: entry.id, year: YEAR, month: curM,
+    cat_id: 'xi', cat_name: entry.desc || 'Revenu extra',
+    cat_type: 'xi', amount: entry.amount,
+    date: entry.date, note: entry.desc || '',
+    due_month: null, record_type: 'income',
+  });
+}
+
+async function sendProvToSB(catId, dueM, prov) {
+  if (!hasSB()) return;
+  await sbUpsert('transactions', {
+    id: prov.id, year: YEAR, month: prov.month,
+    cat_id: catId,
+    cat_name: CATS.find(c => c.id === catId)?.name || catId,
+    cat_type: 'provision', amount: prov.amount,
+    date: YEAR + '-' + String(prov.month + 1).padStart(2, '0') + '-01',
+    note: '', due_month: dueM, record_type: 'provision',
+  });
+}
+
+async function pushSettingsToSB() {
+  if (!hasSB()) return;
+  await sbUpsert('settings', {
+    id: 'main',
+    budget_overrides: budgetOverrides,
+    cc_debt_override: ccDebtOverride,
+  });
+}
+
+async function syncFromSupabase() {
+  if (!hasSB()) { toast("Configure Supabase d'abord", 'err'); return; }
+  setSB('sync');
+  toast('Récupération en cours...', 'info');
+  const rows = await sbFetch('transactions', 'year=eq.' + YEAR + '&order=date.asc');
+  if (rows === null) { setSB('err'); toast('Erreur de connexion', 'err'); return; }
+  expenses = {}; extraIncomes = {}; provisions = {};
+  for (const r of rows) {
+    const m = r.month;
+    if (r.record_type === 'expense') {
+      if (!expenses[mk(m)]) expenses[mk(m)] = [];
+      expenses[mk(m)].push({
+        id: r.id, cat: r.cat_id, amount: r.amount,
+        date: r.date, note: r.note || '', month: m,
+        dueMonth: r.due_month != null ? r.due_month : undefined,
+      });
+    } else if (r.record_type === 'income') {
+      if (!extraIncomes[mk(m)]) extraIncomes[mk(m)] = [];
+      extraIncomes[mk(m)].push({ id: r.id, desc: r.cat_name, amount: r.amount, date: r.date });
+    } else if (r.record_type === 'provision') {
+      const key = provKey(r.cat_id, r.due_month);
+      if (!provisions[key]) provisions[key] = [];
+      provisions[key].push({ id: r.id, month: m, amount: r.amount });
+    }
+  }
+  const settings = await sbFetch('settings', 'id=eq.main');
+  if (settings && settings.length > 0) {
+    budgetOverrides = settings[0].budget_overrides || {};
+    ccDebtOverride  = settings[0].cc_debt_override ?? null;
+  }
+  persist(); renderAll(); setSB('ok');
+  localStorage.setItem('cfg_reminder_dismissed', '1');
+  const rem = document.getElementById('cfgReminder'); if (rem) rem.remove();
+  toast('Données synchronisées ✓', 'ok');
+}
+
+async function testConnection() {
+  if (!hasSB()) { toast("Configure Supabase d'abord", 'err'); setSB('err'); return; }
+  setSB('sync');
+  try {
+    const res = await fetch(sbU('transactions') + '?limit=1', {
+      method: 'GET', headers: sbH(),
+    });
+    if (res.ok) {
+      setSB('ok');
+      localStorage.setItem('cfg_reminder_dismissed', '1');
+      const rem = document.getElementById('cfgReminder'); if (rem) rem.remove();
+      toast('Connexion Supabase OK ✓', 'ok');
+    } else {
+      setSB('err');
+      toast('Erreur ' + res.status + ' — vérifie URL et clé', 'err');
+    }
+  } catch(e) {
+    setSB('err'); toast('Connexion impossible', 'err');
+  }
+}
+
+function saveConfig() {
+  cfg.sbUrl = (document.getElementById('sbUrl').value || '').replace(/\/+$/, '');
+  cfg.sbKey = document.getElementById('sbKey').value || '';
+  persist();
+}
+
 async function saveConfigExplicit() {
-  // Save first (without triggering setGS 'sync')
-  cfg.sheetId  = document.getElementById('sheetId').value;
-  cfg.sheetTab = document.getElementById('sheetTab').value || 'Dépenses';
-  cfg.appsScriptUrl = document.getElementById('appsScriptUrl').value;
+  cfg.sbUrl = (document.getElementById('sbUrl').value || '').replace(/\/+$/, '');
+  cfg.sbKey = document.getElementById('sbKey').value || '';
   persist();
   toast('Configuration sauvegardée ✓', 'ok');
-  if (cfg.appsScriptUrl) {
-    await testConnection();
-  } else {
-    setGS('err');
-  }
+  if (hasSB()) await testConnection(); else setSB('err');
 }
+
 function loadCfgUI() {
-  document.getElementById('sheetId').value=cfg.sheetId||'';
-  document.getElementById('sheetTab').value=cfg.sheetTab||'Dépenses';
-  document.getElementById('appsScriptUrl').value=cfg.appsScriptUrl||'';
+  document.getElementById('sbUrl').value = cfg.sbUrl || '';
+  document.getElementById('sbKey').value = cfg.sbKey || '';
 }
-// ── Budget & CC edit modals ──
-// Use a closure variable to avoid passing complex data through onclick attributes
+
+// ═══════════════════════════════════════════════════════════
+// BUDGET & CC EDIT MODALS
+// ═══════════════════════════════════════════════════════════
 let _editCtx = null;
 
 function editBudget(catId) {
   const c = CATS.find(x => x.id === catId);
   if (!c) return;
   _editCtx = { catId, type: c.t, dms: c.dm };
-
-  const inputStyle = [
-    'width:100%', 'padding:10px 12px', 'margin-top:6px',
-    'border-radius:10px', 'border:1px solid #ddd',
-    'background:#f9f9fb', 'font-family:inherit',
-    'font-size:1rem', 'color:#1c1c1e', 'box-sizing:border-box'
-  ].join(';');
-
+  const IS = 'width:100%;padding:10px 12px;margin-top:6px;border-radius:10px;' +
+             'border:1px solid #ddd;background:#f9f9fb;font-family:inherit;' +
+             'font-size:1rem;color:#1c1c1e;box-sizing:border-box';
   document.getElementById('modalTitle').textContent = 'Modifier le budget — ' + c.name;
-
   if (c.t === 'm') {
     const cur = budgetOverrides[catId] ?? c.mo;
     document.getElementById('modalBody').innerHTML =
       '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Montant mensuel (CHF)</label>' +
-      '<input type="number" id="editBudgetVal" value="' + cur + '" min="0" step="0.01" style="' + inputStyle + '" />' +
+      '<input type="number" id="editBudgetVal" value="' + cur + '" min="0" step="0.01" style="' + IS + '" />' +
       '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">Valeur par défaut : ' + f(c.mo, 2) + '</p>';
   } else {
     let rows = '';
     c.dm.forEach(function(dueM, di) {
       const ov = budgetOverrides[catId];
       const cur = (ov && ov[dueM] != null) ? ov[dueM] : c.da[di];
-      rows +=
-        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
+      rows += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
         '<span style="flex:1;font-size:0.9rem;color:#3a3a3c">' + MNAMES[dueM] + '</span>' +
         '<input type="number" id="editAnn_' + dueM + '" value="' + cur + '" min="0" step="0.01" ' +
-        'style="width:130px;padding:8px 10px;border-radius:10px;border:1px solid #ddd;background:#f9f9fb;font-family:inherit;font-size:0.95rem;text-align:right;color:#1c1c1e" />' +
-        '</div>';
+        'style="width:130px;padding:8px 10px;border-radius:10px;border:1px solid #ddd;' +
+        'background:#f9f9fb;font-family:inherit;font-size:0.95rem;text-align:right;color:#1c1c1e" /></div>';
     });
     document.getElementById('modalBody').innerHTML = rows;
   }
-
   document.getElementById('modalBtns').innerHTML =
     '<button class="cancel" onclick="closeModal()">Annuler</button>' +
     '<button class="cancel" onclick="resetBudget()">Réinitialiser</button>' +
     '<button class="confirm blue" onclick="saveBudgetOverride()">Enregistrer</button>';
-
   document.getElementById('overlay').classList.add('open');
-  // Focus first input after animation
   setTimeout(function() {
     const inp = document.querySelector('#modalBody input');
     if (inp) inp.focus();
@@ -1312,16 +1404,13 @@ function saveBudgetOverride() {
     const map = {};
     dms.forEach(function(dueM) {
       const inp = document.getElementById('editAnn_' + dueM);
-      if (inp) {
-        const val = parseFloat(inp.value);
-        if (!isNaN(val) && val >= 0) map[dueM] = val;
-      }
+      if (inp) { const val = parseFloat(inp.value); if (!isNaN(val) && val >= 0) map[dueM] = val; }
     });
     budgetOverrides[catId] = map;
   }
   persist();
-  closeModal();
-  renderAll();
+  pushSettingsToSB();
+  closeModal(); renderAll();
   toast('Budget mis à jour ✓', 'ok');
 }
 
@@ -1329,36 +1418,27 @@ function resetBudget() {
   if (!_editCtx) return;
   delete budgetOverrides[_editCtx.catId];
   persist();
-  closeModal();
-  renderAll();
+  pushSettingsToSB();
+  closeModal(); renderAll();
   toast('Budget réinitialisé', 'ok');
 }
 
-// ── CC Debt override modal ──
 function editCCDebt() {
   _editCtx = { type: 'cc' };
   const cur = getCCDebt();
-
-  const inputStyle = [
-    'width:100%', 'padding:10px 12px', 'margin-top:6px',
-    'border-radius:10px', 'border:1px solid #ddd',
-    'background:#f9f9fb', 'font-family:inherit',
-    'font-size:1rem', 'color:#1c1c1e', 'box-sizing:border-box'
-  ].join(';');
-
+  const IS = 'width:100%;padding:10px 12px;margin-top:6px;border-radius:10px;' +
+             'border:1px solid #ddd;background:#f9f9fb;font-family:inherit;' +
+             'font-size:1rem;color:#1c1c1e;box-sizing:border-box';
   document.getElementById('modalTitle').textContent = 'Dette carte de crédit';
   document.getElementById('modalBody').innerHTML =
     '<p style="font-size:0.85rem;color:#6e6e73;margin-bottom:12px">Saisis le montant réel restant à rembourser.</p>' +
     '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Montant restant (CHF)</label>' +
-    '<input type="number" id="editCCVal" value="' + cur + '" min="0" step="0.01" style="' + inputStyle + '" />' +
+    '<input type="number" id="editCCVal" value="' + cur + '" min="0" step="0.01" style="' + IS + '" />' +
     '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">' +
-    'Dette initiale : ' + f(CC_DEBT_DEFAULT, 2) + ' · Remboursements enregistrés : ' + f(ccPaidTotal(), 2) +
-    '</p>';
-
+    'Dette initiale : ' + f(CC_DEBT_DEFAULT, 2) + ' · Remboursements enregistrés : ' + f(ccPaidTotal(), 2) + '</p>';
   document.getElementById('modalBtns').innerHTML =
     '<button class="cancel" onclick="closeModal()">Annuler</button>' +
     '<button class="confirm blue" onclick="saveCCDebt()">Enregistrer</button>';
-
   document.getElementById('overlay').classList.add('open');
   setTimeout(function() {
     const inp = document.getElementById('editCCVal');
@@ -1371,43 +1451,50 @@ function saveCCDebt() {
   if (isNaN(val) || val < 0) { toast('Montant invalide', 'err'); return; }
   ccDebtOverride = val;
   persist();
-  closeModal();
-  renderAll();
+  pushSettingsToSB();
+  closeModal(); renderAll();
   toast('Dette CC mise à jour ✓', 'ok');
 }
 
+// ═══════════════════════════════════════════════════════════
+// GUIDE SUPABASE
+// ═══════════════════════════════════════════════════════════
 function showGuide() {
-  document.getElementById('modalTitle').textContent='Configuration Apps Script';
-  document.getElementById('modalBody').innerHTML=`
-<ol style="padding-left:18px;font-size:0.85rem;line-height:2.2;color:var(--text2)">
-  <li>Crée un <strong>Google Sheet</strong> vide — copie son ID depuis l'URL</li>
-  <li>Dans le Sheet : <em>Extensions → Apps Script</em></li>
-  <li>Remplace le code par le script ci-dessous et sauvegarde</li>
-  <li>Clique <em>Déployer → Nouveau déploiement</em> → type : <strong>Application Web</strong></li>
-  <li>Accès : <strong>Tout le monde</strong> → Déployer → copie l'URL</li>
-  <li>Colle l'URL dans le champ <em>URL Apps Script</em> dans l'app</li>
-</ol>
-<pre style="background:var(--bg3);border:0.5px solid var(--sep);padding:12px;border-radius:10px;font-size:0.68rem;overflow:auto;margin-top:12px;white-space:pre-wrap;line-height:1.6">function doPost(e) {
-  var data = JSON.parse(e.postData.contents);
-  if (data.action !== 'addExpense') return ok();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var tab = data.sheetTab || 'Dépenses';
-  var sh = ss.getSheetByName(tab) || ss.insertSheet(tab);
-  if (sh.getLastRow() === 0)
-    sh.appendRow(['ID','Date','Mois','Catégorie',
-      'Type','Montant','Note','Mois échéance']);
-  var d = data.data;
-  sh.appendRow([d.id,d.date,d.mois,d.categorie,
-    d.type,d.montant,d.note,d.mois_echeance]);
-  return ok();
-}
-function doGet(e) { return ok(); }
-function ok() {
-  return ContentService.createTextOutput(
-    JSON.stringify({status:'ok'}))
-    .setMimeType(ContentService.MimeType.JSON);
-}</pre>`;
-  document.getElementById('modalBtns').innerHTML=`<button class="cancel" style="flex:1" onclick="closeModal()">Fermer</button>`;
+  document.getElementById('modalTitle').textContent = 'Configuration Supabase';
+  document.getElementById('modalBody').innerHTML =
+    '<ol style="padding-left:18px;font-size:0.85rem;line-height:2.4;color:var(--text2)">' +
+    '<li>Va sur <strong>supabase.com</strong> → ton projet → <em>SQL Editor</em></li>' +
+    '<li>Exécute le SQL ci-dessous pour créer les 2 tables</li>' +
+    '<li>Va dans <em>Project Settings → API</em></li>' +
+    '<li>Copie l\'<strong>URL</strong> et la clé <strong>anon public</strong></li>' +
+    '<li>Colle-les dans les champs et clique <em>Sauvegarder &amp; connecter</em></li>' +
+    '<li>Clique <em>↓ Récupérer mes données</em> sur un nouvel appareil</li>' +
+    '</ol>' +
+    '<pre style="background:var(--bg3);border:0.5px solid var(--sep);padding:12px;border-radius:10px;' +
+    'font-size:0.66rem;overflow:auto;margin-top:12px;white-space:pre-wrap;line-height:1.6">' +
+    'create table if not exists transactions (\n' +
+    '  id text primary key,\n' +
+    '  year int, month int,\n' +
+    '  cat_id text, cat_name text, cat_type text,\n' +
+    '  amount numeric, date date,\n' +
+    '  note text default \'\', due_month int,\n' +
+    '  record_type text,\n' +
+    '  created_at timestamptz default now()\n' +
+    ');\n\n' +
+    'create table if not exists settings (\n' +
+    '  id text primary key,\n' +
+    '  budget_overrides jsonb default \'{}\',\n' +
+    '  cc_debt_override numeric,\n' +
+    '  updated_at timestamptz default now()\n' +
+    ');\n\n' +
+    'alter table transactions enable row level security;\n' +
+    'alter table settings enable row level security;\n' +
+    'create policy "allow all" on transactions\n' +
+    '  for all using (true) with check (true);\n' +
+    'create policy "allow all" on settings\n' +
+    '  for all using (true) with check (true);</pre>';
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" style="flex:1" onclick="closeModal()">Fermer</button>';
   document.getElementById('overlay').classList.add('open');
 }
 
@@ -1415,74 +1502,66 @@ function ok() {
 // TOAST
 // ═══════════════════════════════════════════════════════════
 let tTimer;
-function toast(msg,type='ok') {
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.className=`toast ${type} show`;
-  clearTimeout(tTimer); tTimer=setTimeout(()=>t.classList.remove('show'),2800);
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + type + ' show';
+  clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
 // ═══════════════════════════════════════════════════════════
 // MONTH SELECT
 // ═══════════════════════════════════════════════════════════
 function initMonthSel() {
-  const sel=document.getElementById('monthSelect');
-  sel.innerHTML=MNAMES.map((n,i)=>`<option value="${i}" ${i===curM?'selected':''}>${n} ${YEAR}</option>`).join('');
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = MNAMES.map((n,i) =>
+    '<option value="' + i + '"' + (i === curM ? ' selected' : '') + '>' + n + ' ' + YEAR + '</option>'
+  ).join('');
 }
 function changeMonth() {
-  curM=parseInt(document.getElementById('monthSelect').value);
+  curM = parseInt(document.getElementById('monthSelect').value);
   renderAll();
 }
 
 // ═══════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════
-// Boot — async to await IndexedDB hydration
 (async () => {
   await hydrate();
   loadCfgUI();
   initMonthSel();
   initForm();
   renderAll();
-  if (cfg.appsScriptUrl) {
-    // Auto-test on every load so status is accurate
+  if (hasSB()) {
     await testConnection();
   } else {
-    setGS('err');
-    // Only show reminder if URL was NEVER configured (not just cleared from session)
+    setSB('err');
     showConfigReminder();
   }
 })();
 
-// ── Config reminder ──
+// ── Config reminder (shown only if Supabase not configured) ──
 function showConfigReminder() {
-  // Don't show if user already dismissed it permanently
   if (localStorage.getItem('cfg_reminder_dismissed')) return;
   const bar = document.createElement('div');
   bar.id = 'cfgReminder';
-  bar.style.cssText = `
-    position:fixed;bottom:0;left:0;right:0;z-index:300;
-    background:#fff;border-top:0.5px solid var(--sep);
-    box-shadow:0 -4px 24px rgba(0,0,0,0.10);
-    padding:16px 20px 32px;display:flex;flex-direction:column;gap:10px;
-    animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
-  `;
-  bar.innerHTML = `
-    <style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>
-    <div style="font-size:1rem;font-weight:600;color:var(--text1)">⚙ Configurer Google Sheets</div>
-    <div style="font-size:0.84rem;color:var(--text3);line-height:1.5">
-      Colle l'URL de ton Apps Script pour synchroniser les données. 
-      La config sera sauvegardée de façon permanente sur cet appareil.
-    </div>
-    <div style="display:flex;gap:10px">
-      <button onclick="localStorage.setItem('cfg_reminder_dismissed','1');document.getElementById('cfgReminder').remove()" 
-        style="flex:1;padding:11px;border-radius:12px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;color:var(--text2)">
-        Ne plus afficher
-      </button>
-      <button onclick="document.getElementById('cfgReminder').remove();document.querySelector('.cfg-body').scrollIntoView({behavior:'smooth'});document.getElementById('appsScriptUrl').focus()"
-        style="flex:1;padding:11px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer">
-        Configurer
-      </button>
-    </div>`;
+  bar.style.cssText =
+    'position:fixed;bottom:0;left:0;right:0;z-index:300;' +
+    'background:#fff;border-top:0.5px solid var(--sep);' +
+    'box-shadow:0 -4px 24px rgba(0,0,0,0.10);' +
+    'padding:16px 20px 36px;display:flex;flex-direction:column;gap:10px;' +
+    'animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);';
+  bar.innerHTML =
+    '<style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>' +
+    '<div style="font-size:1rem;font-weight:600;color:var(--text1)">⚙ Configurer Supabase</div>' +
+    '<div style="font-size:0.84rem;color:var(--text3);line-height:1.5">' +
+    'Colle ton URL Supabase et ta clé API pour synchroniser tes données sur tous tes appareils.</div>' +
+    '<div style="display:flex;gap:10px">' +
+    '<button onclick="localStorage.setItem(\'cfg_reminder_dismissed\',\'1\');document.getElementById(\'cfgReminder\').remove()" ' +
+    'style="flex:1;padding:11px;border-radius:12px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;color:var(--text2)">' +
+    'Ne plus afficher</button>' +
+    '<button onclick="document.getElementById(\'cfgReminder\').remove();document.querySelector(\'.cfg-body\').scrollIntoView({behavior:\'smooth\'});document.getElementById(\'sbUrl\').focus()" ' +
+    'style="flex:1;padding:11px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer">' +
+    'Configurer</button></div>';
   document.body.appendChild(bar);
 }
 
