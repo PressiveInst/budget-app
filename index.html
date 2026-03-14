@@ -1201,19 +1201,23 @@ async function testConnection() {
     });
     const text = await res.text();
     if (res.ok || text.includes('ok')) {
-      setGS('ok'); toast('Connexion Google Sheets OK ✓', 'ok');
+      setGS('ok');
+      localStorage.setItem('cfg_reminder_dismissed', '1');
+      const r = document.getElementById('cfgReminder'); if (r) r.remove();
+      toast('Connexion Google Sheets OK ✓', 'ok');
     } else {
       setGS('err'); toast('Réponse inattendue du serveur', 'err');
     }
   } catch(e) {
-    // CORS error on success is normal for Apps Script — if we get a CORS error
-    // it means the server responded (it exists), just blocked by browser policy
-    if (e instanceof TypeError && e.message.includes('fetch')) {
-      // Network truly unreachable
+    // CORS block = Apps Script responded = URL is valid
+    if (e.name === 'TypeError' && (e.message.includes('NetworkError') || e.message.includes('Failed to fetch') || e.message.includes('Load failed'))) {
       setGS('err'); toast('Impossible de joindre le serveur', 'err');
     } else {
-      // CORS block = server responded = URL is valid
-      setGS('ok'); toast('Connexion OK (réponse reçue)', 'ok');
+      // Any other error (CORS etc.) means server responded — connection works
+      setGS('ok');
+      localStorage.setItem('cfg_reminder_dismissed', '1');
+      const r = document.getElementById('cfgReminder'); if (r) r.remove();
+      toast('Connexion OK ✓', 'ok');
     }
   }
 }
@@ -1439,16 +1443,20 @@ function changeMonth() {
   initMonthSel();
   initForm();
   renderAll();
-  if(cfg.appsScriptUrl) setGS('sync'); else setGS('err');
-  // Show setup prompt if no config yet
-  if (!cfg.appsScriptUrl) showConfigReminder();
+  if (cfg.appsScriptUrl) {
+    // Auto-test on every load so status is accurate
+    await testConnection();
+  } else {
+    setGS('err');
+    // Only show reminder if URL was NEVER configured (not just cleared from session)
+    showConfigReminder();
+  }
 })();
 
 // ── Config reminder ──
 function showConfigReminder() {
-  // Only show once per session
-  if (sessionStorage.getItem('cfg_reminded')) return;
-  sessionStorage.setItem('cfg_reminded', '1');
+  // Don't show if user already dismissed it permanently
+  if (localStorage.getItem('cfg_reminder_dismissed')) return;
   const bar = document.createElement('div');
   bar.id = 'cfgReminder';
   bar.style.cssText = `
@@ -1466,9 +1474,9 @@ function showConfigReminder() {
       La config sera sauvegardée de façon permanente sur cet appareil.
     </div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('cfgReminder').remove()" 
+      <button onclick="localStorage.setItem('cfg_reminder_dismissed','1');document.getElementById('cfgReminder').remove()" 
         style="flex:1;padding:11px;border-radius:12px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;color:var(--text2)">
-        Plus tard
+        Ne plus afficher
       </button>
       <button onclick="document.getElementById('cfgReminder').remove();document.querySelector('.cfg-body').scrollIntoView({behavior:'smooth'});document.getElementById('appsScriptUrl').focus()"
         style="flex:1;padding:11px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer">
