@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 680">
+<rect width="680" height="680" rx="150" fill="#0066ff"/>
+
+<polygon points="235,250 445,250 580,340 340,570 100,340 235,250"
+  fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+
+<line x1="235" y1="250" x2="445" y2="250" stroke="white" stroke-width="8" stroke-linecap="round"/>
+
+<line x1="235" y1="250" x2="220" y2="340" stroke="white" stroke-width="5"/>
+<line x1="445" y1="250" x2="460" y2="340" stroke="white" stroke-width="5"/>
+<line x1="235" y1="250" x2="340" y2="340" stroke="white" stroke-width="5"/>
+<line x1="445" y1="250" x2="340" y2="340" stroke="white" stroke-width="5"/>
+<line x1="100" y1="340" x2="445" y2="250" stroke="white" stroke-width="5"/>
+<line x1="580" y1="340" x2="235" y2="250" stroke="white" stroke-width="5"/>
+<line x1="100" y1="340" x2="460" y2="340" stroke="white" stroke-width="4"/>
+<line x1="580" y1="340" x2="220" y2="340" stroke="white" stroke-width="4"/>
+
+<line x1="220" y1="340" x2="340" y2="570" stroke="white" stroke-width="5"/>
+<line x1="460" y1="340" x2="340" y2="570" stroke="white" stroke-width="5"/>
+<line x1="340" y1="340" x2="340" y2="570" stroke="white" stroke-width="4"/>
+</svg>

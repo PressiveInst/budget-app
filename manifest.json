@@ -4,12 +4,18 @@
   "description": "Suivi budget mensuel personnel",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f2f2f7",
-  "theme_color": "#ffffff",
+  "background_color": "#0066ff",
+  "theme_color": "#0066ff",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23007aff'/><text y='.9em' font-size='72' x='50%' dominant-baseline='middle' text-anchor='middle'>💰</text></svg>",
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2ODAgNjgwIj4KPHJlY3Qgd2lkdGg9IjY4MCIgaGVpZ2h0PSI2ODAiIHJ4PSIxNTAiIGZpbGw9IiMwMDY2ZmYiLz4KCjxwb2x5Z29uIHBvaW50cz0iMjM1LDI1MCA0NDUsMjUwIDU4MCwzNDAgMzQwLDU3MCAxMDAsMzQwIDIzNSwyNTAiCiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cgo8bGluZSB4MT0iMjM1IiB5MT0iMjUwIiB4Mj0iNDQ1IiB5Mj0iMjUwIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgoKPGxpbmUgeDE9IjIzNSIgeTE9IjI1MCIgeDI9IjIyMCIgeTI9IjM0MCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI1Ii8+CjxsaW5lIHgxPSI0NDUiIHkxPSIyNTAiIHgyPSI0NjAiIHkyPSIzNDAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNSIvPgo8bGluZSB4MT0iMjM1IiB5MT0iMjUwIiB4Mj0iMzQwIiB5Mj0iMzQwIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjUiLz4KPGxpbmUgeDE9IjQ0NSIgeTE9IjI1MCIgeDI9IjM0MCIgeTI9IjM0MCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI1Ii8+CjxsaW5lIHgxPSIxMDAiIHkxPSIzNDAiIHgyPSI0NDUiIHkyPSIyNTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNSIvPgo8bGluZSB4MT0iNTgwIiB5MT0iMzQwIiB4Mj0iMjM1IiB5Mj0iMjUwIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjUiLz4KPGxpbmUgeDE9IjEwMCIgeTE9IjM0MCIgeDI9IjQ2MCIgeTI9IjM0MCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CjxsaW5lIHgxPSI1ODAiIHkxPSIzNDAiIHgyPSIyMjAiIHkyPSIzNDAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNCIvPgoKPGxpbmUgeDE9IjIyMCIgeTE9IjM0MCIgeDI9IjM0MCIgeTI9IjU3MCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI1Ii8+CjxsaW5lIHgxPSI0NjAiIHkxPSIzNDAiIHgyPSIzNDAiIHkyPSI1NzAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNSIvPgo8bGluZSB4MT0iMzQwIiB5MT0iMzQwIiB4Mj0iMzQwIiB5Mj0iNTcwIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjQiLz4KPC9zdmc+",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
