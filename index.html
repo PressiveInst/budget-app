@@ -467,7 +467,10 @@ body {
       <div class="card" id="budgetCard">
         <div class="card-hdr">
           <h2>Suivi du mois</h2>
-          <span class="sub" id="tableLabel"></span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="sub" id="tableLabel"></span>
+            <button class="cfg-link" onclick="openCatManager()">⚙ Catégories</button>
+          </div>
         </div>
         <div id="budgetTable"></div>
       </div>
@@ -631,6 +634,15 @@ let deleteTarget    = null; // {type, id, ...}
 let budgetOverrides = {};  // catId -> new monthly amount (for 'm' cats) or {dueM: amount} (for 'a' cats)
 let ccDebtOverride   = null; // number — user-editable remaining CC debt
 let surplusOverride  = null; // number — user-editable surplus carried forward
+let customCats       = [];   // user-added cats: [{id,name,t,mo?,dm?,da?,deleted?}]
+
+// Merged cat list (built from CATS + customCats, minus deleted)
+function allCats() {
+  const deletedIds = new Set(customCats.filter(c=>c.deleted).map(c=>c.id));
+  const custom = customCats.filter(c=>!c.deleted);
+  return [...CATS.filter(c=>!deletedIds.has(c.id)), ...custom];
+}
+function findCat(id) { return allCats().find(c=>c.id===id); }
 
 const mk  = m => `${YEAR}-${String(m+1).padStart(2,'0')}`;
 const getExp = m => expenses[mk(m)]     || [];
@@ -693,6 +705,7 @@ function persist() {
     b26_bov:  budgetOverrides,
     b26_ccov: ccDebtOverride,
     b26_sov:  surplusOverride,
+    b26_cats: customCats,
   };
   for (const [k,v] of Object.entries(data)) {
     try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){}
@@ -714,6 +727,7 @@ async function hydrate() {
   budgetOverrides = await load('b26_bov',  {});
   ccDebtOverride  = await load('b26_ccov', null);
   surplusOverride = await load('b26_sov',  null);
+  customCats      = await load('b26_cats', []);
   const savedCfg  = await load('b26_cfg',  {});
   cfg = {...cfg, ...savedCfg};
 }
@@ -722,13 +736,12 @@ async function hydrate() {
 // CALCULATIONS
 // ═══════════════════════════════════════════════════════════
 function budgetFor(catId, m) {
-  const c = CATS.find(x=>x.id===catId);
+  const c = findCat(catId);
   if (!c) return 0;
   if (c.t==='m') return budgetOverrides[catId] ?? c.mo;
   if (c.t==='a') {
-    const i=c.dm.indexOf(m);
+    const i = (c.dm||[]).indexOf(m);
     if (i < 0) return 0;
-    // Override for annual: stored as {dueM: amount}
     const ov = budgetOverrides[catId];
     return (ov && ov[m] != null) ? ov[m] : c.da[i];
   }
@@ -738,9 +751,9 @@ function actualFor(catId, m) {
   return getExp(m).filter(e=>e.cat===catId).reduce((s,e)=>s+e.amount, 0);
 }
 function totalBudget(m) {
-  return CATS.reduce((s,c) => {
-    if (c.t==='m') return s+c.mo;
-    if (c.t==='a') { const i=c.dm.indexOf(m); return i>=0?s+c.da[i]:s; }
+  return allCats().reduce((s,c) => {
+    if (c.t==='m') return s + (budgetOverrides[c.id] ?? c.mo);
+    if (c.t==='a') { const i=(c.dm||[]).indexOf(m); return i>=0?s+c.da[i]:s; }
     return s;
   }, 0);
 }
@@ -777,7 +790,7 @@ function prevDeficit(m) {
 }
 function savingsPlan(m) {
   const out=[];
-  for (const c of CATS.filter(x=>x.t==='a')) {
+  for (const c of allCats().filter(x=>x.t==='a')) {
     for (let di=0;di<c.dm.length;di++) {
       const dueM=c.dm[di];
       if (dueM<m) continue;
@@ -887,7 +900,7 @@ function renderTable() {
   html+=`<div class="sec-hdr">Frais fixes mensuels</div>
     <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span>Écart</span><span></span></div>`;
   let mb=0,ma=0;
-  for (const c of CATS.filter(x=>x.t==='m')) {
+  for (const c of allCats().filter(x=>x.t==='m')) {
     const b=budgetFor(c.id,m),a=actualFor(c.id,m); mb+=b;ma+=a; html+=row(c,b,a);
   }
   html+=`<div class="brow tot">
@@ -898,12 +911,13 @@ function renderTable() {
   </div>`;
 
   // Annual this month
-  const annThis=CATS.filter(c=>c.t==='a'&&c.dm.includes(m));
+  const annThis=allCats().filter(c=>c.t==='a'&&(c.dm||[]).includes(m));
   if (annThis.length) {
     html+=`<div class="sec-hdr">Frais annuels — ${MNAMES[m]}</div>
       <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span>Écart</span><span></span></div>`;
     let ab=0,aa=0;
-    for (const c of annThis) { const b=budgetFor(c.id,m),a=actualFor(c.id,m);ab+=b;aa+=a;html+=row(c,b,a); }
+    for (const c of annThis) { const b=budgetFor(c.id,m),a=actualFor(c.id,m);ab+=b;aa+=a;html+=row(c,b,a);
+    }
     html+=`<div class="brow tot">
       <span class="cn" style="font-weight:600">Sous-total</span>
       <span class="am">${f(ab)}</span>
@@ -913,9 +927,9 @@ function renderTable() {
   }
 
   // Punctual
-  if (CATS.filter(c=>c.t==='p').some(c=>actualFor(c.id,m)>0)) {
+  if (allCats().filter(c=>c.t==='p').some(c=>actualFor(c.id,m)>0)) {
     html+=`<div class="sec-hdr">Frais ponctuels</div>`;
-    for (const c of CATS.filter(x=>x.t==='p')) { const a=actualFor(c.id,m); if(a>0) html+=row(c,0,a); }
+    for (const c of allCats().filter(x=>x.t==='p')) { const a=actualFor(c.id,m); if(a>0) html+=row(c,0,a); }
   }
 
   // CC
@@ -1001,7 +1015,7 @@ function addProv(catId,dueM) {
   inp.value='';
   renderSavings(); renderTiles();
   sendProvToSB(catId, dueM, newProv);
-  const cat=CATS.find(c=>c.id===catId);
+  const cat=findCat(catId);
   toast(`${cat?.name} — ${f(amt,2)} mis de côté`,'ok');
 }
 
@@ -1019,7 +1033,7 @@ function renderTx() {
   if(!exps.length){el.innerHTML='<div class="empty"><div class="empty-icon">📭</div>Aucune dépense ce mois</div>';return;}
   const sorted=[...exps].sort((a,b)=>new Date(b.date)-new Date(a.date));
   el.innerHTML=sorted.map(e=>{
-    const c=CATS.find(x=>x.id===e.cat);
+    const c=findCat(e.cat);
     return `<div class="tx-item">
       <div class="tx-left">
         <div class="tx-icon t-${c?.t||'m'}">${CAT_ICONS[c?.t||'m']}</div>
@@ -1085,7 +1099,7 @@ function initForm() {
     {lbl:'💳 Carte de crédit',     t:'cc'},
   ];
   sel.innerHTML=groups.map(g=>`<optgroup label="${g.lbl}">${
-    CATS.filter(c=>c.t===g.t).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')
+    allCats().filter(c=>c.t===g.t).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')
   }</optgroup>`).join('');
   document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('xiDate').value  = new Date().toISOString().split('T')[0];
@@ -1117,7 +1131,7 @@ async function addExpense() {
   const amount=parseFloat(document.getElementById('expAmount').value);
   const date=document.getElementById('expDate').value;
   const note=document.getElementById('expNote').value.trim();
-  const cat=CATS.find(c=>c.id===catId);
+  const cat=findCat(catId);
   if(!amount||amount<=0){toast('Montant invalide','err');return;}
   if(!date){toast('Date requise','err');return;}
   const entry={id:Date.now().toString(),cat:catId,amount,date,note,month:curM};
@@ -1262,7 +1276,7 @@ async function sendProvToSB(catId, dueM, prov) {
   await sbUpsert('transactions', {
     id: prov.id, year: YEAR, month: prov.month,
     cat_id: catId,
-    cat_name: CATS.find(c => c.id === catId)?.name || catId,
+    cat_name: findCat(catId)?.name || catId,
     cat_type: 'provision', amount: prov.amount,
     date: YEAR + '-' + String(prov.month + 1).padStart(2, '0') + '-01',
     note: '', due_month: dueM, record_type: 'provision',
@@ -1276,6 +1290,7 @@ async function pushSettingsToSB() {
     budget_overrides: budgetOverrides,
     cc_debt_override: ccDebtOverride,
     surplus_override: surplusOverride,
+    custom_cats: customCats,
   });
 }
 
@@ -1309,6 +1324,7 @@ async function syncFromSupabase() {
     budgetOverrides = settings[0].budget_overrides || {};
     ccDebtOverride  = settings[0].cc_debt_override ?? null;
     surplusOverride = settings[0].surplus_override  ?? null;
+    customCats      = settings[0].custom_cats        || [];
   }
   persist(); renderAll(); setSB('ok');
   localStorage.setItem('cfg_reminder_dismissed', '1');
@@ -1362,7 +1378,7 @@ function loadCfgUI() {
 let _editCtx = null;
 
 function editBudget(catId) {
-  const c = CATS.find(x => x.id === catId);
+  const c = findCat(catId);
   if (!c) return;
   _editCtx = { catId, type: c.t, dms: c.dm };
   const IS = 'width:100%;padding:10px 12px;margin-top:6px;border-radius:10px;' +
@@ -1515,6 +1531,210 @@ function resetSurplus() {
   toast('Surplus recalculé automatiquement', 'ok');
 }
 
+// ═══════════════════════════════════════════════════════════
+// CATEGORY MANAGER
+// ═══════════════════════════════════════════════════════════
+function openCatManager() {
+  renderCatManager();
+  document.getElementById('overlay').classList.add('open');
+}
+
+function renderCatManager() {
+  document.getElementById('modalTitle').textContent = 'Gérer les catégories';
+
+  const monthlyRows = allCats().filter(c=>c.t==='m').map(c => {
+    const isDeleted = customCats.some(x=>x.id===c.id && x.deleted);
+    if (isDeleted) return '';
+    const bud = budgetOverrides[c.id] ?? c.mo;
+    const eid = c.id.replace(/"/g,'');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--sep2)">' +
+      '<span style="flex:1;font-size:0.85rem;color:var(--text1)">' + c.name + '</span>' +
+      '<span style="font-size:0.82rem;color:var(--blue);font-variant-numeric:tabular-nums;min-width:70px;text-align:right">' + f(bud,0) + '</span>' +
+      '<button onclick="editCatInline(\'' + eid + '\')" style="background:none;border:none;cursor:pointer;color:var(--text4);font-size:0.9rem;padding:2px 5px;border-radius:5px" title="Modifier">\u270e</button>' +
+      '<button onclick="deleteCat(\'' + eid + '\')" style="background:none;border:none;cursor:pointer;color:var(--text4);font-size:0.9rem;padding:2px 5px;border-radius:5px" title="Supprimer">\u00d7</button>' +
+      '</div>';
+  }).join('');
+
+  const annualRows = allCats().filter(c=>c.t==='a').map(c => {
+    const isDeleted = customCats.some(x=>x.id===c.id && x.deleted);
+    if (isDeleted) return '';
+    const dueStr = (c.dm||[]).map((m,i)=>MNAMES[m]+' ('+f(c.da[i],0)+')').join(', ');
+    const eid = c.id.replace(/"/g,'');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--sep2)">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:0.85rem;color:var(--text1)">' + c.name + '</div>' +
+        '<div style="font-size:0.72rem;color:var(--text3)">' + dueStr + '</div>' +
+      '</div>' +
+      '<button onclick="editCatInline(\'' + eid + '\')" style="background:none;border:none;cursor:pointer;color:var(--text4);font-size:0.9rem;padding:2px 5px;border-radius:5px" title="Modifier">\u270e</button>' +
+      '<button onclick="deleteCat(\'' + eid + '\')" style="background:none;border:none;cursor:pointer;color:var(--text4);font-size:0.9rem;padding:2px 5px;border-radius:5px" title="Supprimer">\u00d7</button>' +
+      '</div>';
+  }).join('');
+
+  const IS = 'padding:8px 10px;border-radius:8px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.85rem;color:var(--text1);';
+
+  document.getElementById('modalBody').innerHTML =
+    // Monthly section
+    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px">📋 Frais fixes mensuels</div>' +
+    monthlyRows +
+    // Add monthly form
+    '<div id="newMonthlyForm" style="display:flex;gap:8px;margin-top:10px;align-items:center">' +
+      '<input id="newCatNameM" placeholder="Nom de la catégorie" style="flex:1;' + IS + '" />' +
+      '<input id="newCatAmtM" type="number" placeholder="CHF/mois" min="0" step="0.01" style="width:90px;' + IS + 'text-align:right" />' +
+      '<button onclick="addCustomCat(\'m\')" style="padding:8px 12px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap">+ Ajouter</button>' +
+    '</div>' +
+    // Annual section
+    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-top:18px;margin-bottom:6px">📅 Frais annuels (plan d\'épargne)</div>' +
+    annualRows +
+    // Add annual form
+    '<div style="margin-top:10px;padding:12px;background:var(--bg3);border-radius:10px;border:0.5px solid var(--sep)">' +
+      '<div style="display:flex;gap:8px;margin-bottom:8px">' +
+        '<input id="newCatNameA" placeholder="Nom du frais annuel" style="flex:1;' + IS + '" />' +
+      '</div>' +
+      '<div id="newAnnualDates" style="display:flex;flex-direction:column;gap:6px">' +
+        '<div style="font-size:0.72rem;color:var(--text3);margin-bottom:2px">Mois et montants d\'échéance :</div>' +
+        '<div id="annualDateRows">' +
+          '<div class="annual-date-row" style="display:flex;gap:6px;margin-bottom:6px">' +
+            '<select class="ann-month-sel" style="flex:1;' + IS + '">' +
+              MNAMES.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('') +
+            '</select>' +
+            '<input type="number" class="ann-amt-inp" placeholder="Montant CHF" min="0" step="0.01" style="width:110px;' + IS + 'text-align:right" />' +
+          '</div>' +
+        '</div>' +
+        '<button onclick="addAnnualDateRow()" style="background:none;border:0.5px solid var(--sep);border-radius:7px;padding:5px 10px;font-family:inherit;font-size:0.78rem;cursor:pointer;color:var(--blue)">+ Ajouter une autre date</button>' +
+        '<button onclick="addCustomCat(\'a\')" style="margin-top:8px;width:100%;padding:9px;background:var(--blue);color:#fff;border:none;border-radius:9px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer">+ Ajouter ce frais annuel</button>' +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" style="flex:1" onclick="closeModal()">Fermer</button>';
+}
+
+function addAnnualDateRow() {
+  const IS = 'padding:8px 10px;border-radius:8px;border:0.5px solid var(--sep);background:var(--bg3);font-family:inherit;font-size:0.85rem;color:var(--text1);';
+  const div = document.createElement('div');
+  div.className = 'annual-date-row';
+  div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+  div.innerHTML =
+    '<select class="ann-month-sel" style="flex:1;' + IS + '">' +
+      MNAMES.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('') +
+    '</select>' +
+    '<input type="number" class="ann-amt-inp" placeholder="Montant CHF" min="0" step="0.01" style="width:110px;' + IS + 'text-align:right" />' +
+    '<button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:var(--text4);font-size:1rem;padding:0 4px">×</button>';
+  document.getElementById('annualDateRows').appendChild(div);
+}
+
+function addCustomCat(type) {
+  if (type === 'm') {
+    const name = document.getElementById('newCatNameM').value.trim();
+    const amt  = parseFloat(document.getElementById('newCatAmtM').value);
+    if (!name) { toast('Nom requis', 'err'); return; }
+    if (isNaN(amt) || amt < 0) { toast('Montant invalide', 'err'); return; }
+    const id = 'custom_' + Date.now();
+    customCats.push({ id, name, t: 'm', mo: amt });
+    persist(); pushSettingsToSB();
+    renderCatManager(); initForm(); renderAll();
+    toast(name + ' ajouté ✓', 'ok');
+  } else {
+    const name = document.getElementById('newCatNameA').value.trim();
+    if (!name) { toast('Nom requis', 'err'); return; }
+    const rows = document.querySelectorAll('.annual-date-row');
+    const dm = [], da = [];
+    rows.forEach(row => {
+      const m   = parseInt(row.querySelector('.ann-month-sel').value);
+      const amt = parseFloat(row.querySelector('.ann-amt-inp').value);
+      if (!isNaN(amt) && amt > 0) { dm.push(m); da.push(amt); }
+    });
+    if (dm.length === 0) { toast('Ajoute au moins un mois + montant', 'err'); return; }
+    const total = da.reduce((s,v)=>s+v, 0);
+    const id = 'custom_' + Date.now();
+    customCats.push({ id, name, t: 'a', an: total, dm, da });
+    persist(); pushSettingsToSB();
+    renderCatManager(); initForm(); renderAll();
+    toast(name + ' ajouté ✓', 'ok');
+  }
+}
+
+function editCatInline(catId) {
+  const c = findCat(catId);
+  if (!c) return;
+  _editCtx = { catId, type: c.t, dms: c.dm || [] };
+  const IS = 'width:100%;padding:10px 12px;margin-top:6px;border-radius:10px;' +
+             'border:1px solid #ddd;background:#f9f9fb;font-family:inherit;' +
+             'font-size:1rem;color:#1c1c1e;box-sizing:border-box';
+  document.getElementById('modalTitle').textContent = 'Modifier — ' + c.name;
+  if (c.t === 'm') {
+    const cur = budgetOverrides[catId] ?? c.mo;
+    document.getElementById('modalBody').innerHTML =
+      '<label style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6e6e73">Montant mensuel (CHF)</label>' +
+      '<input type="number" id="editBudgetVal" value="' + cur + '" min="0" step="0.01" style="' + IS + '" />' +
+      '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">Valeur par défaut : ' + f(c.mo, 2) + '</p>';
+    document.getElementById('modalBtns').innerHTML =
+      '<button class="cancel" onclick="openCatManager()">Annuler</button>' +
+      '<button class="cancel" onclick="resetBudget();openCatManager()">Réinitialiser</button>' +
+      '<button class="confirm blue" onclick="saveBudgetOverride();openCatManager()">Enregistrer</button>';
+  } else {
+    let rows = '';
+    (c.dm||[]).forEach(function(dueM, di) {
+      const ov = budgetOverrides[catId];
+      const cur2 = (ov && ov[dueM] != null) ? ov[dueM] : c.da[di];
+      rows += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
+        '<span style="flex:1;font-size:0.9rem;color:#3a3a3c">' + MNAMES[dueM] + '</span>' +
+        '<input type="number" id="editAnn_' + dueM + '" value="' + cur2 + '" min="0" step="0.01" ' +
+        'style="width:130px;padding:8px 10px;border-radius:10px;border:1px solid #ddd;' +
+        'background:#f9f9fb;font-family:inherit;font-size:0.95rem;text-align:right;color:#1c1c1e" /></div>';
+    });
+    document.getElementById('modalBody').innerHTML = rows;
+    document.getElementById('modalBtns').innerHTML =
+      '<button class="cancel" onclick="openCatManager()">Annuler</button>' +
+      '<button class="cancel" onclick="resetBudget();openCatManager()">Réinitialiser</button>' +
+      '<button class="confirm blue" onclick="saveBudgetOverride();openCatManager()">Enregistrer</button>';
+  }
+}
+
+function deleteCat(catId) {
+  const c = findCat(catId);
+  if (!c) return;
+  // Check if has expenses
+  let hasExp = false;
+  for (let m=0; m<12; m++) {
+    if (getExp(m).some(e=>e.cat===catId)) { hasExp = true; break; }
+  }
+  if (hasExp) {
+    _editCtx = { type: 'deleteCat', catId };
+    document.getElementById('modalTitle').textContent = 'Supprimer ' + c.name + ' ?';
+    document.getElementById('modalBody').innerHTML =
+      '<p style="font-size:0.85rem;color:var(--text2);line-height:1.6">' +
+      'Cette catégorie a des dépenses enregistrées. Que veux-tu faire ?</p>';
+    const safeId = catId.replace(/'/g,'');
+    document.getElementById('modalBtns').innerHTML =
+      '<button class="cancel" onclick="openCatManager()">Annuler</button>' +
+      '<button class="cancel" onclick="doDeleteCat(\'' + safeId + '\',false)">Garder les dépenses</button>' +
+      '<button class="confirm" onclick="doDeleteCat(\'' + safeId + '\',true)">Tout supprimer</button>';
+  } else {
+    doDeleteCat(catId, false);
+  }
+}
+
+function doDeleteCat(catId, deleteExpenses) {
+  // Mark as deleted in customCats (or add a deletion marker for built-in cats)
+  const existingIdx = customCats.findIndex(c=>c.id===catId);
+  if (existingIdx >= 0) {
+    customCats[existingIdx].deleted = true;
+  } else {
+    // Built-in cat — add deletion marker
+    customCats.push({ id: catId, deleted: true });
+  }
+  if (deleteExpenses) {
+    for (let m=0; m<12; m++) {
+      const filtered = getExp(m).filter(e=>e.cat!==catId);
+      if (filtered.length !== getExp(m).length) setExp(m, filtered);
+    }
+  }
+  persist(); pushSettingsToSB();
+  closeModal(); initForm(); renderAll();
+  toast('Catégorie supprimée', 'ok');
+}
+
 function showGuide() {
   document.getElementById('modalTitle').textContent = 'Configuration Supabase';
   document.getElementById('modalBody').innerHTML =
@@ -1585,24 +1805,16 @@ function changeMonth() {
 // BOOT
 // ═══════════════════════════════════════════════════════════
 (async () => {
-  try {
-    await hydrate();
-    loadCfgUI();
-    initMonthSel();
-    initForm();
-    renderAll();
-    if (hasSB()) {
-      await testConnection();
-    } else {
-      setSB('err');
-      showConfigReminder();
-    }
-  } catch(e) {
-    console.error('BOOT ERROR:', e);
-    // Show error visibly on page
-    document.getElementById('budgetTable').innerHTML =
-      '<div style="padding:20px;color:red;font-family:monospace;font-size:0.8rem">' +
-      '<strong>Erreur au démarrage:</strong><br>' + e.message + '<br><br>' + e.stack + '</div>';
+  await hydrate();
+  loadCfgUI();
+  initMonthSel();
+  initForm();
+  renderAll();
+  if (hasSB()) {
+    await testConnection();
+  } else {
+    setSB('err');
+    showConfigReminder();
   }
 })();
 
