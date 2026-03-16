@@ -158,14 +158,14 @@ body {
   border-bottom: 0.5px solid var(--sep2);
 }
 .col-hdr {
-  display: grid; grid-template-columns: 1fr 19% 19% 15% 30px;
+  display: grid; grid-template-columns: 1fr 22% 22% 30px;
   padding: 6px 16px; background: var(--bg3);
   border-bottom: 0.5px solid var(--sep);
 }
 .col-hdr span { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text4); text-align: right; }
 .col-hdr span:first-child { text-align: left; }
 .brow {
-  display: grid; grid-template-columns: 1fr 19% 19% 15% 30px;
+  display: grid; grid-template-columns: 1fr 22% 22% 30px;
   align-items: center; padding: 0 16px;
   border-bottom: 0.5px solid var(--sep2); min-height: 50px;
   transition: background 0.1s;
@@ -364,8 +364,8 @@ body {
   .tile { padding: 13px 11px; }
   .tile-val { font-size: 1.2rem; }
   .col-hdr, .brow { padding-left: 12px; padding-right: 12px; }
-  .col-hdr { grid-template-columns: 1fr 18% 18% 14% 28px; }
-  .brow     { grid-template-columns: 1fr 18% 18% 14% 28px; min-height: 46px; }
+  .col-hdr { grid-template-columns: 1fr 21% 21% 26px; }
+  .brow     { grid-template-columns: 1fr 21% 21% 26px; min-height: 46px; }
   .sec-hdr  { padding: 7px 12px 4px; }
   .card-hdr { padding: 12px 12px 8px; }
   .form-body, .cfg-body { padding: 12px 12px; }
@@ -419,8 +419,8 @@ body {
         <div class="card-hdr">
           <h2>Suivi du mois</h2>
           <div style="display:flex;align-items:center;gap:10px">
-            <span class="sub" id="tableLabel"></span>
-            <button class="cfg-link" onclick="openCatManager()">⚙ Catégories</button>
+            <button onclick="addAllFixed()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:600;color:var(--green);padding:0">✚ Frais fixes</button>
+            <button onclick="openCatManager()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:500;color:var(--blue);padding:0">⚙ Catégories</button>
           </div>
         </div>
         <div id="budgetTable"></div>
@@ -777,7 +777,7 @@ function renderTiles() {
   const adjSol=sol+surplus-deficit;
   const xi=extraIncomeTotal(m);
 
-  document.getElementById('tableLabel').textContent = MNAMES[m]+' '+YEAR;
+  // tableLabel removed
   document.getElementById('tiles').innerHTML = `
     <div class="tile t-blue">
       <span class="tile-icon">💵</span>
@@ -827,9 +827,6 @@ function renderTable() {
     const pct=bud>0?Math.min(100,Math.round(act/bud*100)):0;
     const diff=act-bud;
     const nc=cat.t==='a'?'cn ann':'cn';
-    const diffSpan=(act>0||bud>0)
-      ? `<span class="am diff ${ov?'ov':'ok'}">${diff>0?'+':''}${f(diff)}</span>`
-      : '<span></span>';
     const editBtn = (cat.t==='m'||cat.t==='a')
       ? `<button class="edit-bud-btn" onclick="editBudget('${cat.id}')" title="Modifier le budget">✎</button>`
       : '';
@@ -838,7 +835,6 @@ function renderTable() {
         <span class="${nc}">${cat.name}${editBtn}</span>
         <span class="am dim">${bud>0?f(bud):'—'}</span>
         <span class="am ${act>0?(ov?'ov':'ok'):''}">${act>0?f(act):'—'}</span>
-        ${diffSpan}
         <button class="iadd" onclick="quickAdd('${cat.id}')">+</button>
       </div>
       ${act>0&&bud>0?`<div class="brow" style="min-height:0;padding-top:0;padding-bottom:6px;border-bottom:none">
@@ -849,7 +845,7 @@ function renderTable() {
 
   // Monthly
   html+=`<div class="sec-hdr">Frais fixes mensuels</div>
-    <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span>Écart</span><span></span></div>`;
+    <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span></span></div>`;
   let mb=0,ma=0;
   for (const c of allCats().filter(x=>x.t==='m')) {
     const b=budgetFor(c.id,m),a=actualFor(c.id,m); mb+=b;ma+=a; html+=row(c,b,a);
@@ -858,14 +854,14 @@ function renderTable() {
     <span class="cn" style="font-weight:600">Sous-total</span>
     <span class="am">${f(mb)}</span>
     <span class="am ${ma>mb?'ov':'ok'}">${f(ma)}</span>
-    <span class="am diff ${ma>mb?'ov':'ok'}">${f(ma-mb)}</span><span></span>
+    <span></span>
   </div>`;
 
   // Annual this month
   const annThis=allCats().filter(c=>c.t==='a'&&(c.dm||[]).includes(m));
   if (annThis.length) {
     html+=`<div class="sec-hdr">Frais annuels — ${MNAMES[m]}</div>
-      <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span>Écart</span><span></span></div>`;
+      <div class="col-hdr"><span>Catégorie</span><span>Budget</span><span>Réel</span><span></span></div>`;
     let ab=0,aa=0;
     for (const c of annThis) { const b=budgetFor(c.id,m),a=actualFor(c.id,m);ab+=b;aa+=a;html+=row(c,b,a);
     }
@@ -873,7 +869,7 @@ function renderTable() {
       <span class="cn" style="font-weight:600">Sous-total</span>
       <span class="am">${f(ab)}</span>
       <span class="am ${aa>ab?'ov':'ok'}">${f(aa)}</span>
-      <span class="am diff ${aa>ab?'ov':'ok'}">${f(aa-ab)}</span><span></span>
+      <span></span>
     </div>`;
   }
 
@@ -892,7 +888,6 @@ function renderTable() {
         <span class="cn">Remboursement CC <span style="font-size:0.72rem;color:var(--text3)">(reste: ${f(ccRem)})</span><button class="edit-bud-btn" onclick="editCCDebt()" title="Modifier la dette">✎</button></span>
         <span class="am dim">${f(ccBud)}</span>
         <span class="am ${ccAct>0?'ok':''}">${ccAct>0?f(ccAct):'—'}</span>
-        <span class="am diff ok">${ccAct>0?f(ccAct-ccBud):''}</span>
         <button class="iadd" onclick="quickAdd('cc')">+</button>
       </div>`;
   }
@@ -903,10 +898,9 @@ function renderTable() {
   const surplus=prevSurplus(m), deficit=prevDeficit(m);
 
   html+=`<div class="brow grand">
-    <span class="cn">Total</span>
+    <span class="cn">Total <span style="font-size:0.78rem;opacity:0.7;font-weight:400">${sol>=0?'surplus '+f(Math.abs(sol)):'déficit '+f(Math.abs(sol))}</span></span>
     <span class="am">${f(tb)}</span>
     <span class="am" style="color:${ta>tb?'#ff6b63':'#34c759'}">${f(ta)}</span>
-    <span class="am" style="color:${sol<0?'#ff6b63':'#34c759'}">${f(sol)}</span>
     <span></span>
   </div>`;
 
@@ -1073,8 +1067,9 @@ function onCatChange() {
 function quickAdd(catId) {
   setTab('exp');
   document.getElementById('expCat').value=catId; onCatChange();
-  document.getElementById('expAmount').focus();
-  document.querySelector('.panel').scrollIntoView({behavior:'smooth',block:'start'});
+  const amtField = document.getElementById('expAmount');
+  amtField.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(() => amtField.focus(), 300);
 }
 
 async function addExpense() {
@@ -1736,6 +1731,89 @@ function toast(msg, type='ok') {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast ' + type + ' show';
   clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADD ALL FIXED EXPENSES AT ONCE
+// ═══════════════════════════════════════════════════════════
+function addAllFixed() {
+  const m = curM;
+  const today = new Date();
+  // Use first day of current month as date
+  const dateStr = YEAR + '-' + String(m+1).padStart(2,'0') + '-01';
+
+  // Get all monthly fixed cats
+  const fixedCats = allCats().filter(c => c.t === 'm');
+
+  // Check which ones already have an entry this month
+  const existing = getExp(m);
+  const alreadyAdded = new Set(existing.map(e => e.cat));
+  const toAdd = fixedCats.filter(c => !alreadyAdded.has(c.id));
+
+  if (toAdd.length === 0) {
+    toast('Tous les frais fixes sont déjà enregistrés ce mois', 'info');
+    return;
+  }
+
+  // Show confirmation modal with list and editable amounts
+  _editCtx = { type: 'allFixed', cats: toAdd, date: dateStr };
+
+  const IS = 'padding:7px 10px;border-radius:8px;border:0.5px solid var(--sep);' +
+             'background:var(--bg3);font-family:inherit;font-size:0.92rem;' +
+             'color:var(--text1);text-align:right;width:110px;';
+
+  const rows = toAdd.map(c => {
+    const bud = budgetFor(c.id, m);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--sep2)">' +
+      '<span style="flex:1;font-size:0.9rem;color:var(--text1)">' + c.name + '</span>' +
+      '<input type="number" id="fixed_' + c.id + '" value="' + bud.toFixed(2) + '" ' +
+      'min="0" step="0.01" style="' + IS + '" />' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('modalTitle').textContent = 'Enregistrer les frais fixes — ' + MNAMES[m];
+  document.getElementById('modalBody').innerHTML =
+    '<p style="font-size:0.84rem;color:var(--text3);margin-bottom:12px">' +
+    toAdd.length + ' catégorie(s) à enregistrer. Ajuste les montants si besoin.</p>' +
+    '<div style="margin-bottom:4px;display:flex;justify-content:flex-end">' +
+      '<span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4)">Montant (CHF)</span>' +
+    '</div>' +
+    rows;
+
+  document.getElementById('modalBtns').innerHTML =
+    '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+    '<button class="confirm blue" onclick="confirmAddAllFixed()">Enregistrer tout</button>';
+
+  document.getElementById('overlay').classList.add('open');
+}
+
+async function confirmAddAllFixed() {
+  if (!_editCtx || _editCtx.type !== 'allFixed') return;
+  const { cats, date } = _editCtx;
+  const m = curM;
+  const arr = getExp(m);
+  const newEntries = [];
+
+  for (const c of cats) {
+    const inp = document.getElementById('fixed_' + c.id);
+    const amount = parseFloat(inp ? inp.value : 0);
+    if (isNaN(amount) || amount <= 0) continue;
+    const entry = {
+      id: Date.now().toString() + '_' + c.id,
+      cat: c.id, amount, date, note: '', month: m
+    };
+    arr.push(entry);
+    newEntries.push({ entry, cat: c });
+  }
+
+  setExp(m, arr);
+
+  // Send to Supabase in parallel
+  await Promise.all(newEntries.map(({ entry, cat }) => sendToSB(entry, cat)));
+
+  closeModal();
+  renderAll();
+  toast(newEntries.length + ' frais fixes enregistrés ✓', 'ok');
 }
 
 // ═══════════════════════════════════════════════════════════
