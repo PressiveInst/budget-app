@@ -102,8 +102,8 @@ body {
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
 /* ── Layout ──────────────────────────────────────────────── */
-.page { max-width: 1160px; margin: 0 auto; padding: 20px 14px 60px; }
-.grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+.page { max-width: 1160px; margin: 0 auto; padding: 20px 14px 60px; width: 100%; }
+.grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; min-width: 0; }
 @media(max-width:880px){ .grid{ grid-template-columns:1fr; } }
 
 /* ── Cards (iOS grouped style) ───────────────────────────── */
@@ -112,6 +112,8 @@ body {
   border-radius: var(--r16);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
+  width: 100%;
 }
 .card + .card { margin-top: 18px; }
 .card-hdr {
@@ -170,18 +172,20 @@ body {
   border-bottom: 0.5px solid var(--sep2);
 }
 .col-hdr {
-  display: grid; grid-template-columns: 1fr 80px 80px 72px 30px;
-  padding: 6px 16px; background: var(--bg3);
+  display: grid; grid-template-columns: 1fr 18% 18% 15% 28px;
+  padding: 6px 14px; background: var(--bg3);
   border-bottom: 0.5px solid var(--sep);
+  min-width: 0; width: 100%;
 }
 .col-hdr span { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text4); text-align: right; }
 .col-hdr span:first-child { text-align: left; }
 
 .brow {
-  display: grid; grid-template-columns: 1fr 80px 80px 72px 30px;
-  align-items: center; padding: 0 16px;
+  display: grid; grid-template-columns: 1fr 18% 18% 15% 28px;
+  align-items: center; padding: 0 14px;
   border-bottom: 0.5px solid var(--sep2); min-height: 50px;
   transition: background 0.1s;
+  min-width: 0; width: 100%;
 }
 .brow:last-child { border-bottom: none; }
 .brow:hover { background: rgba(0,0,0,0.018); }
@@ -196,7 +200,7 @@ body {
 }
 .brow.grand .cn { color: #fff; font-size: 1rem; font-weight: 600; }
 .brow.grand .am { color: #fff; font-size: 0.96rem; }
-.cn { font-size: 0.95rem; color: var(--text1); }
+.cn { font-size: 0.95rem; color: var(--text1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cn.ann { color: var(--blue); }
 .cn.ann::after { content:'·'; margin-left:4px; color:var(--orange); font-size:1rem; vertical-align:1px; }
 .am { text-align: right; font-size: 0.92rem; font-variant-numeric: tabular-nums; color: var(--text2); }
@@ -444,8 +448,8 @@ body {
   .tile-lbl { font-size: 0.7rem; }
   .tile-sub { font-size: 0.72rem; }
   /* Budget rows - compact on mobile */
-  .brow { min-height: 46px; padding: 0 10px; grid-template-columns: 1fr 72px 72px 62px 28px; }
-  .col-hdr { padding: 5px 10px; grid-template-columns: 1fr 72px 72px 62px 28px; }
+  .brow { min-height: 46px; padding: 0 10px; }
+  .col-hdr { padding: 5px 10px; }
   .col-hdr span { font-size: 0.68rem; }
   .cn { font-size: 0.88rem; }
   .am { font-size: 0.84rem; }
@@ -475,8 +479,8 @@ body {
   .tile-lbl { font-size: 0.7rem; }
   .tile-sub { font-size: 0.72rem; }
   /* Budget rows - compact on mobile */
-  .brow { min-height: 46px; padding: 0 10px; grid-template-columns: 1fr 72px 72px 62px 28px; }
-  .col-hdr { padding: 5px 10px; grid-template-columns: 1fr 72px 72px 62px 28px; }
+  .brow { min-height: 46px; padding: 0 10px; }
+  .col-hdr { padding: 5px 10px; }
   .col-hdr span { font-size: 0.68rem; }
   .cn { font-size: 0.88rem; }
   .am { font-size: 0.84rem; }
@@ -533,7 +537,7 @@ body {
   <div class="grid">
 
     <!-- LEFT -->
-    <div>
+    <div style="min-width:0">
       <div class="card" id="budgetCard">
         <div class="card-hdr">
           <h2>Suivi du mois</h2>
