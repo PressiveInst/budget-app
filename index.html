@@ -118,16 +118,19 @@ body {
 .tile {
   background: var(--bg2); border-radius: var(--r16);
   padding: 16px 14px; box-shadow: var(--shadow-sm);
-  position: relative; overflow: hidden;
 }
-.tile::before {
-  content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:3px 3px 0 0;
+.tile.t-blue   { background: rgba(0,122,255,0.06); }
+.tile.t-green  { background: rgba(52,199,89,0.07); }
+.tile.t-red    { background: rgba(255,59,48,0.06); }
+.tile.t-orange { background: rgba(255,149,0,0.06); }
+.tile-icon {
+  margin-bottom: 8px; display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 10px;
 }
-.tile.t-blue::before   { background: var(--blue); }
-.tile.t-green::before  { background: var(--green); }
-.tile.t-red::before    { background: var(--red); }
-.tile.t-orange::before { background: var(--orange); }
-.tile-icon { font-size: 1.5rem; margin-bottom: 6px; display: block; }
+.tile.t-blue   .tile-icon { background: rgba(0,122,255,0.12);   color: var(--blue); }
+.tile.t-green  .tile-icon { background: rgba(52,199,89,0.15);   color: var(--green); }
+.tile.t-red    .tile-icon { background: rgba(255,59,48,0.12);   color: var(--red); }
+.tile.t-orange .tile-icon { background: rgba(255,149,0,0.12);   color: var(--orange); }
 .tile-lbl  { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 3px; }
 .tile-val  { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text1); line-height: 1.1; word-break: break-all; }
 .tile-sub  { font-size: 0.74rem; color: var(--text3); margin-top: 3px; }
@@ -191,7 +194,7 @@ body {
 .pfill.warn { background: var(--orange); }
 .pfill.over { background: var(--red); }
 .ov-badge { grid-column:1/-1; margin:2px 0 5px; font-size:0.78rem; color:var(--red); display:flex; align-items:center; gap:5px; }
-.ov-badge::before { content:'⚠'; }
+.ov-badge::before { content:''; }
 .iadd {
   width:28px; height:28px; border-radius:8px; background:var(--blue-bg); border:none;
   color:var(--blue); font-size:1.1rem; display:flex; align-items:center; justify-content:center;
@@ -353,7 +356,7 @@ body {
 
 /* ── Empty ───────────────────────────────────────────────── */
 .empty { padding:30px 20px; text-align:center; color:var(--text4); font-size:0.9rem; }
-.empty-icon { font-size:2rem; margin-bottom:6px; }
+.empty-icon { margin-bottom:8px; display:flex; justify-content:center; color:var(--text4); }
 
 /* ── 2-line navbar ───────────────────────────────────────── */
 .navbar {
@@ -382,10 +385,10 @@ body {
   background: none; border: none; cursor: pointer; font-family: inherit;
   padding: 4px 0; transition: opacity 0.15s;
 }
-.tabbtn-icon { font-size: 1.35rem; line-height: 1; }
+.tabbtn-icon { line-height: 1; display:flex; align-items:center; justify-content:center; color:var(--text3); }
 .tabbtn-lbl  { font-size: 0.68rem; font-weight: 500; color: var(--text3); }
 .tabbtn.active .tabbtn-lbl { color: var(--blue); font-weight: 700; }
-.tabbtn.active .tabbtn-icon { transform: scale(1.1); }
+.tabbtn.active .tabbtn-icon { color: var(--blue); transform: scale(1.1); }
 .tabpage { padding-bottom: 70px; }
 
 /* ── Mobile ──────────────────────────────────────────────── */
@@ -415,13 +418,13 @@ body {
 <!-- Navbar -->
 <nav class="navbar">
   <div class="navbar-row1">
-    <span class="navbar-title">💰 Budget 2026</span>
+    <span class="navbar-title">Budget 2026</span>
     <span class="gs-dot err" id="gsStatus">Hors ligne</span>
   </div>
   <div class="navbar-row2">
-    <div class="month-pill">
+    <label class="month-pill" for="monthSelect">
       <select id="monthSelect" onchange="changeMonth()"></select>
-    </div>
+    </label>
   </div>
 </nav>
 
@@ -448,10 +451,7 @@ body {
     <div class="card" style="margin-bottom:16px">
       <div class="card-hdr">
         <h2>Suivi du mois</h2>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="addAllFixed()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:600;color:var(--green);padding:0">✚ Frais fixes</button>
-          <button onclick="openCatManager()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:500;color:var(--blue);padding:0">⚙ Catégories</button>
-        </div>
+        <button onclick="addAllFixed()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:600;color:var(--green);padding:0"><svg width="15" height="15" style="vertical-align:middle;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Frais fixes</button>
       </div>
       <div id="budgetTable"></div>
     </div>
@@ -472,7 +472,7 @@ body {
           <div class="fg"><label>Date</label><input type="date" id="expDate"/></div>
         </div>
         <div class="fg" id="dueDateGrp" style="display:none">
-          <label>📅 Mois d'échéance</label>
+          <label>Mois d'échéance</label>
           <select id="expDueMonth"></select>
         </div>
         <div class="fg"><label>Note (optionnel)</label><input type="text" id="expNote" placeholder="Détail..."/></div>
@@ -517,6 +517,12 @@ body {
 <div id="page-reglages" class="tabpage" style="display:none">
   <div class="page">
     <div class="card" style="margin-bottom:16px">
+      <div class="card-hdr"><h2>Catégories</h2></div>
+      <div class="cfg-body">
+        <button class="btn-primary" onclick="openCatManager()">Gérer les catégories</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-hdr">
         <h2>Supabase</h2>
         <button class="cfg-link" onclick="showGuide()">Guide de config</button>
@@ -528,27 +534,21 @@ body {
         <button class="btn-sec" style="width:100%" onclick="syncFromSupabase()">↓ Récupérer mes données</button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-hdr"><h2>Catégories</h2></div>
-      <div class="cfg-body">
-        <button class="btn-primary" onclick="openCatManager()">⚙ Gérer les catégories</button>
-      </div>
-    </div>
   </div>
 </div>
 
 <!-- Bottom tab bar -->
 <nav class="tabbar">
   <button class="tabbtn active" id="tabbtn-budget" onclick="navTo('budget')">
-    <span class="tabbtn-icon">📊</span>
+    <span class="tabbtn-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>
     <span class="tabbtn-lbl">Budget</span>
   </button>
   <button class="tabbtn" id="tabbtn-depenses" onclick="navTo('depenses')">
-    <span class="tabbtn-icon">🧾</span>
+    <span class="tabbtn-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
     <span class="tabbtn-lbl">Dépenses</span>
   </button>
   <button class="tabbtn" id="tabbtn-reglages" onclick="navTo('reglages')">
-    <span class="tabbtn-icon">⚙️</span>
+    <span class="tabbtn-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     <span class="tabbtn-lbl">Réglages</span>
   </button>
 </nav>
@@ -560,7 +560,13 @@ body {
 const SALARY = 9690;
 const MONTH_INC = [SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY,SALARY*2];
 const MNAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const CAT_ICONS = { m:'📋', a:'📅', p:'⚡', cc:'💳', xi:'💸' };
+const CAT_ICONS = {
+  m:  '<svg width=\"16\" height=\"16\" style=\"vertical-align:middle\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><polyline points=\"9 22 9 12 15 12 15 22\"/></svg>',
+  a:  '<svg width=\"16\" height=\"16\" style=\"vertical-align:middle\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"18\" rx=\"2\" ry=\"2\"/><line x1=\"16\" y1=\"2\" x2=\"16\" y2=\"6\"/><line x1=\"8\" y1=\"2\" x2=\"8\" y2=\"6\"/><line x1=\"3\" y1=\"10\" x2=\"21\" y2=\"10\"/></svg>',
+  p:  '<svg width=\"16\" height=\"16\" style=\"vertical-align:middle\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"13 2 3 14 12 14 11 22 21 10 12 10 13 2\"/></svg>',
+  cc: '<svg width=\"16\" height=\"16\" style=\"vertical-align:middle\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"1\" y=\"4\" width=\"22\" height=\"16\" rx=\"2\" ry=\"2\"/><line x1=\"1\" y1=\"10\" x2=\"23\" y2=\"10\"/></svg>',
+  xi: '<svg width=\"16\" height=\"16\" style=\"vertical-align:middle\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"5\"/><polyline points=\"5 12 12 5 19 12\"/></svg>',
+};
 
 const CATS = [
   {id:'loyer',         name:'Loyer',                              t:'m', mo:1670},
@@ -812,25 +818,25 @@ function renderTiles() {
   // tableLabel removed
   document.getElementById('tiles').innerHTML = `
     <div class="tile t-blue">
-      <span class="tile-icon">💵</span>
+      <span class="tile-icon"><svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2\"/><circle cx=\"12\" cy=\"14\" r=\"2\"/></svg></span>
       <div class="tile-lbl">Revenu</div>
       <div class="tile-val">${f(inc)}</div>
       <div class="tile-sub">${m===11?'13e sal. inclus':xi>0?'+'+f(xi)+' extra':'salaire mensuel'}</div>
     </div>
     <div class="tile t-orange">
-      <span class="tile-icon">📊</span>
+      <span class="tile-icon"><svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"22 7 13.5 15.5 8.5 10.5 2 17\"/><polyline points=\"16 7 22 7 22 13\"/></svg></span>
       <div class="tile-lbl">Budget prévu</div>
       <div class="tile-val">${f(bud)}</div>
       <div class="tile-sub">${pct}% utilisé</div>
     </div>
     <div class="tile ${pct>100?'t-red':pct>85?'t-orange':'t-blue'}">
-      <span class="tile-icon">🧾</span>
+      <span class="tile-icon"><svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z\"/><line x1=\"8\" y1=\"10\" x2=\"16\" y2=\"10\"/><line x1=\"8\" y1=\"14\" x2=\"13\" y2=\"14\"/></svg></span>
       <div class="tile-lbl">Dépenses réelles</div>
       <div class="tile-val ${pct>100?'c-red':pct>85?'c-orange':''}">${f(act)}</div>
       <div class="tile-sub">${pct}% du budget</div>
     </div>
     <div class="tile ${adjSol>=0?'t-green':'t-red'}">
-      <span class="tile-icon">${adjSol>=0?'✅':'⚠️'}</span>
+      <span class="tile-icon">${adjSol>=0?'<svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':'<svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>'}</span>
       <div class="tile-lbl">Solde ajusté</div>
       <div class="tile-val ${adjSol>=0?'c-green':'c-red'}">${f(adjSol)}</div>
       <div class="tile-sub">${surplus>0?'surplus '+f(surplus)+(surplusOverride!==null?' ✎':'')+ ' reporté':deficit>0?'déficit '+f(deficit)+' déduit':'solde net'}</div>
@@ -859,12 +865,9 @@ function renderTable() {
     const pct=bud>0?Math.min(100,Math.round(act/bud*100)):0;
     const diff=act-bud;
     const nc=cat.t==='a'?'cn ann':'cn';
-    const editBtn = (cat.t==='m'||cat.t==='a')
-      ? `<button class="edit-bud-btn" onclick="editBudget('${cat.id}')" title="Modifier le budget">✎</button>`
-      : '';
     return `
       <div class="brow">
-        <span class="${nc}">${cat.name}${editBtn}</span>
+        <span class="${nc}">${cat.name}</span>
         <span class="am dim">${bud>0?f(bud):'—'}</span>
         <span class="am ${act>0?(ov?'ov':'ok'):''}">${act>0?f(act):'—'}</span>
         <button class="iadd" onclick="quickAdd('${cat.id}')">+</button>
@@ -917,7 +920,7 @@ function renderTable() {
   if (ccRem>0||ccAct>0) {
     html+=`<div class="sec-hdr">Remboursement carte de crédit</div>
       <div class="brow">
-        <span class="cn">Remboursement CC <span style="font-size:0.72rem;color:var(--text3)">(reste: ${f(ccRem)})</span><button class="edit-bud-btn" onclick="editCCDebt()" title="Modifier la dette">✎</button></span>
+        <span class="cn">Remboursement CC <span style="font-size:0.72rem;color:var(--text3)">(reste: ${f(ccRem)})</span></span>
         <span class="am dim">${f(ccBud)}</span>
         <span class="am ${ccAct>0?'ok':''}">${ccAct>0?f(ccAct):'—'}</span>
         <button class="iadd" onclick="quickAdd('cc')">+</button>
@@ -936,9 +939,9 @@ function renderTable() {
     <span></span>
   </div>`;
 
-  if (surplus>0) html+=`<div class="banner ok" style="justify-content:space-between;align-items:center"><span>✅ Surplus reporté : <strong>${f(surplus)}</strong> — solde ajusté : <strong>${f(sol+surplus)}</strong></span><button class="edit-bud-btn" onclick="editSurplus()" style="font-size:0.82rem;padding:3px 8px;border-radius:6px;background:rgba(52,199,89,0.15);color:var(--green);border:none;cursor:pointer;font-family:inherit;font-weight:600">✎ Modifier</button></div>`;
-  if (deficit>0) html+=`<div class="banner warn">⚠ Déficit cumulé déduit : <strong>${f(deficit)}</strong> — solde ajusté : <strong>${f(sol-deficit)}</strong></div>`;
-  if (sol<0)     html+=`<div class="banner err">⚠ Dépassement de <strong>${f(Math.abs(sol))}</strong> ce mois</div>`;
+  if (surplus>0) html+=`<div class="banner ok" style="justify-content:space-between;align-items:center"><span>Surplus reporté : <strong>${f(surplus)}</strong> — solde ajusté : <strong>${f(sol+surplus)}</strong></span><button class="edit-bud-btn" onclick="editSurplus()" style="font-size:0.82rem;padding:3px 8px;border-radius:6px;background:rgba(52,199,89,0.15);color:var(--green);border:none;cursor:pointer;font-family:inherit;font-weight:600">✎ Modifier</button></div>`;
+  if (deficit>0) html+=`<div class="banner warn">Déficit cumulé déduit : <strong>${f(deficit)}</strong> — solde ajusté : <strong>${f(sol-deficit)}</strong></div>`;
+  if (sol<0)     html+=`<div class="banner err">Dépassement de <strong>${f(Math.abs(sol))}</strong> ce mois</div>`;
 
   document.getElementById('budgetTable').innerHTML = html;
 }
@@ -1007,7 +1010,7 @@ function renderTx() {
   const exps=getExp(curM);
   document.getElementById('txCount').textContent=exps.length+' entrée(s)';
   const el=document.getElementById('txList');
-  if(!exps.length){el.innerHTML='<div class="empty"><div class="empty-icon">📭</div>Aucune dépense ce mois</div>';return;}
+  if(!exps.length){el.innerHTML='<div class="empty"><div class="empty-icon"><svg width=\"36\" height=\"36\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z\"/><line x1=\"9\" y1=\"9\" x2=\"15\" y2=\"15\"/><line x1=\"15\" y1=\"9\" x2=\"9\" y2=\"15\"/></svg></div>Aucune dépense ce mois</div>';return;}
   const sorted=[...exps].sort((a,b)=>new Date(b.date)-new Date(a.date));
   el.innerHTML=sorted.map(e=>{
     const c=findCat(e.cat);
@@ -1070,7 +1073,7 @@ function setTab(tab) {
 function initForm() {
   const sel=document.getElementById('expCat');
   const groups=[
-    {lbl:'📋 Frais fixes mensuels',t:'m'},
+    {lbl:'Frais fixes mensuels',t:'m'},
     {lbl:'📅 Frais annuels',       t:'a'},
     {lbl:'⚡ Frais ponctuels',     t:'p'},
     {lbl:'💳 Carte de crédit',     t:'cc'},
@@ -1555,7 +1558,7 @@ function renderCatManager() {
 
   document.getElementById('modalBody').innerHTML =
     // Monthly section
-    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px">📋 Frais fixes mensuels</div>' +
+    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px">Frais fixes mensuels</div>' +
     monthlyRows +
     // Add monthly form
     '<div id="newMonthlyForm" style="display:flex;gap:8px;margin-top:10px;align-items:center">' +
@@ -1564,7 +1567,7 @@ function renderCatManager() {
       '<button onclick="addCustomCat(\'m\')" style="padding:8px 12px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap">+ Ajouter</button>' +
     '</div>' +
     // Annual section
-    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-top:18px;margin-bottom:6px">📅 Frais annuels (plan d\'épargne)</div>' +
+    '<div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-top:18px;margin-bottom:6px">Frais annuels (plan d\'épargne)</div>' +
     annualRows +
     // Add annual form
     '<div style="margin-top:10px;padding:12px;background:var(--bg3);border-radius:10px;border:0.5px solid var(--sep)">' +
@@ -1908,7 +1911,7 @@ function showConfigReminder() {
     'animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);';
   bar.innerHTML =
     '<style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>' +
-    '<div style="font-size:1rem;font-weight:600;color:var(--text1)">⚙ Configurer Supabase</div>' +
+    '<div style="font-size:1rem;font-weight:600;color:var(--text1)">Configurer Supabase</div>' +
     '<div style="font-size:0.84rem;color:var(--text3);line-height:1.5">' +
     'Colle ton URL Supabase et ta clé API pour synchroniser tes données sur tous tes appareils.</div>' +
     '<div style="display:flex;gap:10px">' +
