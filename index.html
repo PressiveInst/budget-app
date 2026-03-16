@@ -355,6 +355,39 @@ body {
 .empty { padding:30px 20px; text-align:center; color:var(--text4); font-size:0.9rem; }
 .empty-icon { font-size:2rem; margin-bottom:6px; }
 
+/* ── 2-line navbar ───────────────────────────────────────── */
+.navbar {
+  height: auto !important;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px 16px 8px !important;
+  gap: 6px;
+}
+.navbar-row1 { display:flex; align-items:center; justify-content:space-between; }
+.navbar-row2 { display:flex; align-items:center; }
+.navbar-title { flex:1; margin-right:0; }
+.month-pill { flex:1; }
+
+/* ── Tab bar ─────────────────────────────────────────────── */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--sep);
+  display: flex; padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+}
+.tabbtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  padding: 4px 0; transition: opacity 0.15s;
+}
+.tabbtn-icon { font-size: 1.35rem; line-height: 1; }
+.tabbtn-lbl  { font-size: 0.68rem; font-weight: 500; color: var(--text3); }
+.tabbtn.active .tabbtn-lbl { color: var(--blue); font-weight: 700; }
+.tabbtn.active .tabbtn-icon { transform: scale(1.1); }
+.tabpage { padding-bottom: 70px; }
+
 /* ── Mobile ──────────────────────────────────────────────── */
 @media(max-width:480px) {
   :root { font-size: 15px; }
@@ -381,12 +414,14 @@ body {
 
 <!-- Navbar -->
 <nav class="navbar">
-  <span class="navbar-title">💰 Budget 2026</span>
-  <div class="navbar-right">
+  <div class="navbar-row1">
+    <span class="navbar-title">💰 Budget 2026</span>
+    <span class="gs-dot err" id="gsStatus">Hors ligne</span>
+  </div>
+  <div class="navbar-row2">
     <div class="month-pill">
       <select id="monthSelect" onchange="changeMonth()"></select>
     </div>
-    <span class="gs-dot err" id="gsStatus">Hors ligne</span>
   </div>
 </nav>
 
@@ -403,123 +438,120 @@ body {
   </div>
 </div>
 
-<div class="page">
+<!-- Tab pages -->
+<div id="page-budget" class="tabpage">
+  <div class="page">
+    <div class="tiles" id="tiles"></div>
+    <div id="extraBanner" style="display:none"></div>
 
-  <!-- Summary tiles -->
-  <div class="tiles" id="tiles"></div>
-
-  <!-- Extra income banner (shown only when extra income exists) -->
-  <div id="extraBanner" style="display:none"></div>
-
-  <div class="grid">
-
-    <!-- LEFT -->
-    <div>
-      <div class="card" id="budgetCard">
-        <div class="card-hdr">
-          <h2>Suivi du mois</h2>
-          <div style="display:flex;align-items:center;gap:10px">
-            <button onclick="addAllFixed()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:600;color:var(--green);padding:0">✚ Frais fixes</button>
-            <button onclick="openCatManager()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:500;color:var(--blue);padding:0">⚙ Catégories</button>
-          </div>
+    <!-- Budget table -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hdr">
+        <h2>Suivi du mois</h2>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button onclick="addAllFixed()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:600;color:var(--green);padding:0">✚ Frais fixes</button>
+          <button onclick="openCatManager()" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:500;color:var(--blue);padding:0">⚙ Catégories</button>
         </div>
-        <div id="budgetTable"></div>
+      </div>
+      <div id="budgetTable"></div>
+    </div>
+
+    <!-- Add expense -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hdr">
+        <h2>Nouvelle entrée</h2>
+        <div style="display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:2px">
+          <button id="tabExp" onclick="setTab('exp')" style="padding:4px 10px;border:none;border-radius:6px;font-size:0.82rem;font-weight:600;cursor:pointer;background:var(--bg2);color:var(--blue);box-shadow:var(--shadow-sm);font-family:inherit">Dépense</button>
+          <button id="tabXI" onclick="setTab('xi')" style="padding:4px 10px;border:none;border-radius:6px;font-size:0.82rem;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:inherit">Revenu extra</button>
+        </div>
+      </div>
+      <div id="formExp" class="form-body">
+        <div class="fg"><label>Catégorie</label><select id="expCat" onchange="onCatChange()"></select></div>
+        <div class="fg2">
+          <div class="fg"><label>Montant (CHF)</label><input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01"/></div>
+          <div class="fg"><label>Date</label><input type="date" id="expDate"/></div>
+        </div>
+        <div class="fg" id="dueDateGrp" style="display:none">
+          <label>📅 Mois d'échéance</label>
+          <select id="expDueMonth"></select>
+        </div>
+        <div class="fg"><label>Note (optionnel)</label><input type="text" id="expNote" placeholder="Détail..."/></div>
+        <button class="btn-primary" id="submitBtn" onclick="addExpense()"><span>Enregistrer</span></button>
+      </div>
+      <div id="formXI" class="form-body" style="display:none">
+        <div class="fg"><label>Description</label><input type="text" id="xiDesc" placeholder="ex. Bonus, Vente, Remboursement..."/></div>
+        <div class="fg2">
+          <div class="fg"><label>Montant (CHF)</label><input type="number" id="xiAmount" placeholder="0.00" min="0" step="0.01"/></div>
+          <div class="fg"><label>Date</label><input type="date" id="xiDate"/></div>
+        </div>
+        <button class="btn-primary" style="background:var(--green)" onclick="addExtraIncome()"><span>Ajouter au revenu</span></button>
+        <div id="xiList"></div>
       </div>
     </div>
 
-    <!-- RIGHT -->
-    <div class="panel">
-
-      <!-- Add expense / income -->
-      <div class="card">
-        <div class="card-hdr">
-          <h2>Nouvelle entrée</h2>
-          <!-- Toggle tabs -->
-          <div style="display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:2px">
-            <button id="tabExp" onclick="setTab('exp')"
-              style="padding:4px 10px;border:none;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;background:var(--bg2);color:var(--blue);box-shadow:var(--shadow-sm);font-family:inherit">
-              Dépense
-            </button>
-            <button id="tabXI" onclick="setTab('xi')"
-              style="padding:4px 10px;border:none;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:inherit">
-              Revenu extra
-            </button>
-          </div>
-        </div>
-
-        <!-- Expense form -->
-        <div id="formExp" class="form-body">
-          <div class="fg"><label>Catégorie</label><select id="expCat" onchange="onCatChange()"></select></div>
-          <div class="fg2">
-            <div class="fg"><label>Montant (CHF)</label><input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01"/></div>
-            <div class="fg"><label>Date</label><input type="date" id="expDate"/></div>
-          </div>
-          <div class="fg" id="dueDateGrp" style="display:none">
-            <label>📅 Mois d'échéance</label>
-            <select id="expDueMonth"></select>
-          </div>
-          <div class="fg"><label>Note (optionnel)</label><input type="text" id="expNote" placeholder="Détail..."/></div>
-          <button class="btn-primary" id="submitBtn" onclick="addExpense()"><span>Enregistrer</span></button>
-        </div>
-
-        <!-- Extra income form -->
-        <div id="formXI" class="form-body" style="display:none">
-          <div class="fg"><label>Description</label><input type="text" id="xiDesc" placeholder="ex. Bonus, Vente, Remboursement..."/></div>
-          <div class="fg2">
-            <div class="fg"><label>Montant (CHF)</label><input type="number" id="xiAmount" placeholder="0.00" min="0" step="0.01"/></div>
-            <div class="fg"><label>Date</label><input type="date" id="xiDate"/></div>
-          </div>
-          <button class="btn-primary" style="background:var(--green)" onclick="addExtraIncome()"><span>Ajouter au revenu</span></button>
-          <!-- List of extra incomes this month -->
-          <div id="xiList"></div>
-        </div>
+    <!-- Savings plan -->
+    <div class="card">
+      <div class="card-hdr">
+        <h2>Plan d'épargne</h2>
+        <span class="sub">6 prochains mois</span>
       </div>
-
-      <!-- Savings plan -->
-      <div class="card">
-        <div class="card-hdr">
-          <h2>Plan d'épargne</h2>
-          <span class="sub">6 prochains mois</span>
-        </div>
-        <div id="savingsList" class="savings-list"></div>
-      </div>
-
-      <!-- Transactions -->
-      <div class="card">
-        <div class="card-hdr">
-          <h2>Dépenses du mois</h2>
-          <span class="sub" id="txCount"></span>
-        </div>
-        <div id="txList" class="tx-list"></div>
-      </div>
-
-      <!-- Supabase config -->
-      <div class="card">
-        <div class="card-hdr">
-          <h2>Supabase</h2>
-          <button class="cfg-link" onclick="showGuide()">Guide de config</button>
-        </div>
-        <div class="cfg-body">
-          <div class="fg">
-            <label>Project URL</label>
-            <input id="sbUrl" placeholder="https://xxxx.supabase.co" oninput="saveConfig()"/>
-          </div>
-          <div class="fg">
-            <label>Anon Key (public)</label>
-            <input id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIs..." oninput="saveConfig()" type="password"/>
-          </div>
-          <button class="btn-primary" onclick="saveConfigExplicit()" style="margin-bottom:4px">
-            Sauvegarder &amp; connecter
-          </button>
-          <button class="btn-sec" style="width:100%" onclick="syncFromSupabase()">
-            ↓ Récupérer mes données
-          </button>
-        </div>
-      </div>
-
+      <div id="savingsList" class="savings-list"></div>
     </div>
   </div>
 </div>
+
+<!-- Page Dépenses -->
+<div id="page-depenses" class="tabpage" style="display:none">
+  <div class="page">
+    <div class="card">
+      <div class="card-hdr">
+        <h2>Dépenses du mois</h2>
+        <span class="sub" id="txCount"></span>
+      </div>
+      <div id="txList" class="tx-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Page Réglages -->
+<div id="page-reglages" class="tabpage" style="display:none">
+  <div class="page">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hdr">
+        <h2>Supabase</h2>
+        <button class="cfg-link" onclick="showGuide()">Guide de config</button>
+      </div>
+      <div class="cfg-body">
+        <div class="fg"><label>Project URL</label><input id="sbUrl" placeholder="https://xxxx.supabase.co" oninput="saveConfig()"/></div>
+        <div class="fg"><label>Anon Key (public)</label><input id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIs..." oninput="saveConfig()" type="password"/></div>
+        <button class="btn-primary" onclick="saveConfigExplicit()" style="margin-bottom:4px">Sauvegarder &amp; connecter</button>
+        <button class="btn-sec" style="width:100%" onclick="syncFromSupabase()">↓ Récupérer mes données</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><h2>Catégories</h2></div>
+      <div class="cfg-body">
+        <button class="btn-primary" onclick="openCatManager()">⚙ Gérer les catégories</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom tab bar -->
+<nav class="tabbar">
+  <button class="tabbtn active" id="tabbtn-budget" onclick="navTo('budget')">
+    <span class="tabbtn-icon">📊</span>
+    <span class="tabbtn-lbl">Budget</span>
+  </button>
+  <button class="tabbtn" id="tabbtn-depenses" onclick="navTo('depenses')">
+    <span class="tabbtn-icon">🧾</span>
+    <span class="tabbtn-lbl">Dépenses</span>
+  </button>
+  <button class="tabbtn" id="tabbtn-reglages" onclick="navTo('reglages')">
+    <span class="tabbtn-icon">⚙️</span>
+    <span class="tabbtn-lbl">Réglages</span>
+  </button>
+</nav>
 
 <script>
 // ═══════════════════════════════════════════════════════════
@@ -1067,9 +1099,12 @@ function onCatChange() {
 function quickAdd(catId) {
   setTab('exp');
   document.getElementById('expCat').value=catId; onCatChange();
+  // Pre-fill with budget amount
+  const bud = budgetFor(catId, curM);
   const amtField = document.getElementById('expAmount');
+  if (bud > 0) amtField.value = bud.toFixed(2);
   amtField.scrollIntoView({behavior:'smooth', block:'center'});
-  setTimeout(() => amtField.focus(), 300);
+  setTimeout(() => { amtField.focus(); amtField.select(); }, 300);
 }
 
 async function addExpense() {
@@ -1814,6 +1849,19 @@ async function confirmAddAllFixed() {
   closeModal();
   renderAll();
   toast(newEntries.length + ' frais fixes enregistrés ✓', 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════════════════════
+let curNav = 'budget';
+function navTo(page) {
+  ['budget','depenses','reglages'].forEach(p => {
+    document.getElementById('page-' + p).style.display = p === page ? '' : 'none';
+    document.getElementById('tabbtn-' + p).classList.toggle('active', p === page);
+  });
+  curNav = page;
+  if (page === 'depenses') renderTx();
 }
 
 // ═══════════════════════════════════════════════════════════
