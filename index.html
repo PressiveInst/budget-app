@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Budget"/>
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icon.svg"/>
 <title>Budget 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
@@ -1746,6 +1747,7 @@ function showGuide() {
     '  budget_overrides jsonb default \'{}\',\n' +
     '  cc_debt_override numeric,\n' +
     '  surplus_override numeric,\n' +
+    '  custom_cats jsonb default \'[]\',\n' +
     '  updated_at timestamptz default now()\n' +
     ');\n\n' +
     '-- Si la table settings existe déjà, ajoute la colonne:\n' +
