@@ -590,6 +590,26 @@ body {
 <div id="page-reglages" class="tabpage" style="display:none">
   <div class="page">
     <div class="card" style="margin-bottom:16px">
+      <div class="card-hdr"><h2>Revenu</h2></div>
+      <div class="cfg-body">
+        <div class="fg">
+          <label>Salaire mensuel net (CHF)</label>
+          <input type="number" id="cfgSalary" placeholder="9690" min="0" step="1" oninput="previewSalary()"/>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--sep2)">
+          <div id="cfg13Check" onclick="toggleCfg13()"
+            style="width:22px;height:22px;border-radius:99px;border:2px solid var(--sep);background:var(--bg3);
+                   display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:all 0.15s">
+          </div>
+          <span style="font-size:0.9rem;color:var(--text1);cursor:pointer" onclick="toggleCfg13()">
+            13e salaire versé en décembre
+          </span>
+        </div>
+        <div id="cfgSalaryPreview" style="font-size:0.8rem;color:var(--text3);padding-top:4px"></div>
+        <button class="btn-primary" onclick="saveSalaryConfig()">Enregistrer le revenu</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
       <div class="card-hdr"><h2>Catégories</h2></div>
       <div class="cfg-body">
         <button class="btn-primary" onclick="openCatManager()">Gérer les catégories</button>
@@ -1810,6 +1830,67 @@ function doDeleteCat(catId, deleteExpenses) {
   toast('Catégorie supprimée', 'ok');
 }
 
+// ═══════════════════════════════════════════════════════════
+// SALARY CONFIG
+// ═══════════════════════════════════════════════════════════
+let cfgSalaryThirteenth = true;
+
+function loadSalaryConfigUI() {
+  const sal = MONTH_INC[0];
+  const has13 = MONTH_INC[11] !== MONTH_INC[0];
+  cfgSalaryThirteenth = has13;
+  const inp = document.getElementById('cfgSalary');
+  if (inp) inp.value = sal || '';
+  updateCfg13UI();
+  previewSalary();
+}
+
+function updateCfg13UI() {
+  const el = document.getElementById('cfg13Check');
+  if (!el) return;
+  if (cfgSalaryThirteenth) {
+    el.style.background = 'var(--blue)';
+    el.style.borderColor = 'var(--blue)';
+    el.innerHTML = '<div style="width:6px;height:10px;border:2px solid white;border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-2px)"></div>';
+  } else {
+    el.style.background = 'var(--bg3)';
+    el.style.borderColor = 'var(--sep)';
+    el.innerHTML = '';
+  }
+}
+
+function toggleCfg13() {
+  cfgSalaryThirteenth = !cfgSalaryThirteenth;
+  updateCfg13UI();
+  previewSalary();
+}
+
+function previewSalary() {
+  const sal = parseFloat(document.getElementById('cfgSalary')?.value) || 0;
+  const annual = sal * (cfgSalaryThirteenth ? 13 : 12);
+  const el = document.getElementById('cfgSalaryPreview');
+  if (el && sal > 0) {
+    el.textContent = 'Revenu annuel : ' + annual.toLocaleString('fr-CH') + ' CHF' +
+      (cfgSalaryThirteenth ? ' (×13)' : ' (×12)');
+  } else if (el) {
+    el.textContent = '';
+  }
+}
+
+async function saveSalaryConfig() {
+  const sal = parseFloat(document.getElementById('cfgSalary')?.value);
+  if (!sal || sal <= 0) { toast('Montant invalide', 'err'); return; }
+  // Update MONTH_INC
+  for (let i = 0; i < 11; i++) MONTH_INC[i] = sal;
+  MONTH_INC[11] = cfgSalaryThirteenth ? sal * 2 : sal;
+  // Persist
+  const salData = { salary: sal, thirteenth: cfgSalaryThirteenth };
+  await idbSet('b26_sal', salData);
+  localStorage.setItem('b26_sal', JSON.stringify(salData));
+  renderAll();
+  toast('Revenu mis à jour ✓', 'ok');
+}
+
 function showGuide() {
   document.getElementById('modalTitle').textContent = 'Configuration Supabase';
   document.getElementById('modalBody').innerHTML =
@@ -1957,6 +2038,7 @@ function navTo(page) {
   });
   curNav = page;
   if (page === 'depenses') renderTx();
+  if (page === 'reglages') loadSalaryConfigUI();
 }
 
 // ═══════════════════════════════════════════════════════════
