@@ -892,7 +892,7 @@ function savingsPlan(m) {
       if (dueM<m) continue;
       const mLeft=dueM-m;
       if (mLeft>6) continue;
-      const amt=c.da[di];
+      const amt=budgetFor(c.id,dueM);
       const saved=totalSaved(c.id,dueM);
       const rem=Math.max(0,amt-saved);
       const per=mLeft>0?Math.ceil(rem/mLeft):rem;
@@ -1649,7 +1649,7 @@ function renderCatManager() {
   const annualRows = allCats().filter(c=>c.t==='a').map(c => {
     const isDeleted = customCats.some(x=>x.id===c.id && x.deleted);
     if (isDeleted) return '';
-    const dueStr = (c.dm||[]).map((m,i)=>MNAMES[m]+' ('+f(c.da[i],0)+')').join(', ');
+    const dueStr = (c.dm||[]).map((m,i)=>{ const ov=budgetOverrides[c.id]; const amt=(ov&&ov[m]!=null)?ov[m]:c.da[i]; return MNAMES[m]+' ('+f(amt,0)+')'; }).join(', ');
     const eid = c.id.replace(/"/g,'');
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--sep2)">' +
       '<div style="flex:1">' +
