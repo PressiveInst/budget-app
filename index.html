@@ -851,11 +851,7 @@ function actualFor(catId, m) {
   return getExp(m).filter(e=>e.cat===catId).reduce((s,e)=>s+e.amount, 0);
 }
 function totalBudget(m) {
-  return allCats().reduce((s,c) => {
-    if (c.t==='m') return s + (budgetOverrides[c.id] ?? c.mo);
-    if (c.t==='a') { const i=(c.dm||[]).indexOf(m); return i>=0?s+c.da[i]:s; }
-    return s;
-  }, 0);
+  return allCats().reduce((s,c) => s + budgetFor(c.id, m), 0);
 }
 function totalActual(m) { return getExp(m).reduce((s,e)=>s+e.amount, 0); }
 function ccPaidTotal() {
