@@ -1780,6 +1780,11 @@ function editCatInline(catId) {
       '<button class="cancel" onclick="resetBudget()">Réinitialiser</button>' +
       '<button class="confirm blue" onclick="saveBudgetOverride()">Enregistrer</button>';
   }
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(function() {
+    const inp = document.querySelector('#modalBody input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 320);
 }
 
 function deleteCat(catId) {
