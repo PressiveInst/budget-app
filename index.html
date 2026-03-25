@@ -1764,9 +1764,9 @@ function editCatInline(catId) {
       '<input type="number" id="editBudgetVal" value="' + cur + '" min="0" step="0.01" style="' + IS + '" />' +
       '<p style="font-size:0.75rem;color:#aeaeb2;margin-top:8px">Valeur par défaut : ' + f(c.mo, 2) + '</p>';
     document.getElementById('modalBtns').innerHTML =
-      '<button class="cancel" onclick="openCatManager()">Annuler</button>' +
-      '<button class="cancel" onclick="resetBudget();openCatManager()">Réinitialiser</button>' +
-      '<button class="confirm blue" onclick="saveBudgetOverride();openCatManager()">Enregistrer</button>';
+      '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+      '<button class="cancel" onclick="resetBudget()">Réinitialiser</button>' +
+      '<button class="confirm blue" onclick="saveBudgetOverride()">Enregistrer</button>';
   } else {
     let rows = '';
     (c.dm||[]).forEach(function(dueM, di) {
@@ -1780,9 +1780,9 @@ function editCatInline(catId) {
     });
     document.getElementById('modalBody').innerHTML = rows;
     document.getElementById('modalBtns').innerHTML =
-      '<button class="cancel" onclick="openCatManager()">Annuler</button>' +
-      '<button class="cancel" onclick="resetBudget();openCatManager()">Réinitialiser</button>' +
-      '<button class="confirm blue" onclick="saveBudgetOverride();openCatManager()">Enregistrer</button>';
+      '<button class="cancel" onclick="closeModal()">Annuler</button>' +
+      '<button class="cancel" onclick="resetBudget()">Réinitialiser</button>' +
+      '<button class="confirm blue" onclick="saveBudgetOverride()">Enregistrer</button>';
   }
 }
 
