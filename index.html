@@ -1095,21 +1095,55 @@ function addProv(catId,dueM) {
   const inp=document.getElementById('prov_'+key);
   const amt=parseFloat(inp.value);
   if(!amt||amt<=0){toast('Montant invalide','err');return;}
+
+  const id = Date.now().toString();
+  const today = new Date().toISOString().split('T')[0];
+  const cat = findCat(catId);
+
+  // 1. Save provision record (for savings plan tracking)
+  const newProv = {id, month:curM, amount:amt};
   const list=getProv(catId,dueM);
-  const newProv = {id:Date.now().toString(),month:curM,amount:amt};
   list.push(newProv);
   setProv(catId,dueM,list);
+
+  // 2. Create a real expense entry so it impacts the balance
+  const entry = {
+    id: 'prov_' + id,
+    cat: catId,
+    amount: amt,
+    date: today,
+    note: 'Épargne → ' + MNAMES[dueM],
+    month: curM,
+    dueMonth: dueM,
+    isProv: true,  // flag to identify provision expenses
+  };
+  const arr = getExp(curM);
+  arr.push(entry);
+  setExp(curM, arr);
+
   inp.value='';
-  renderSavings(); renderTiles();
+  renderAll();
   sendProvToSB(catId, dueM, newProv);
-  const cat=findCat(catId);
+  sendToSB(entry, {name: (cat?.name || catId) + ' (épargne)', t: 'a'});
   toast(`${cat?.name} — ${f(amt,2)} mis de côté`,'ok');
 }
 
 function deleteProv(catId,dueM,provId) {
+  // Remove provision record
   setProv(catId,dueM,getProv(catId,dueM).filter(p=>p.id!==provId));
   sbDelete('transactions', provId);
-  renderSavings(); renderTiles();
+
+  // Also remove the linked expense (id = 'prov_' + provId)
+  const expId = 'prov_' + provId;
+  for (let m = 0; m < 12; m++) {
+    const arr = getExp(m);
+    const filtered = arr.filter(e => e.id !== expId);
+    if (filtered.length !== arr.length) {
+      setExp(m, filtered);
+      sbDelete('transactions', expId);
+    }
+  }
+  renderAll();
   toast('Provision supprimée','info');
 }
 
